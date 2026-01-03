@@ -41,3 +41,7 @@ desktop.ini
 test_drive/
 *.tmp
 volvo_verify_temp.txt
+
+# Log files
+logs/
+*.log

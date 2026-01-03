@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Volvo XC70 2012 USB Media Drive Verifier
 
@@ -24,9 +25,22 @@ import sys
 import platform
 import subprocess
 import json
+import logging
+import csv
+from datetime import datetime
 from pathlib import Path
 from collections import defaultdict
 from typing import Dict, List, Tuple, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import multiprocessing
+
+# Fix Windows console encoding issues
+if platform.system() == "Windows":
+    import io
+    if sys.stdout.encoding != 'utf-8':
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    if sys.stderr.encoding != 'utf-8':
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 try:
     from mutagen.mp3 import MP3
@@ -60,17 +74,31 @@ class VolvoUSBVerifier:
     MAX_BITRATE = 320
     MAX_ALBUM_ART_SIZE = (500, 500)
 
-    def __init__(self, drive_path: str):
+    def __init__(self, drive_path: str, num_threads: Optional[int] = None):
         self.drive_path = Path(drive_path)
         self.errors = []
         self.warnings = []
         self.info = []
         self.file_stats = defaultdict(int)
+        self.problem_files = []  # Track all problem files for CSV export
+        # Use os.cpu_count() which returns thread count (logical processors)
+        self.num_threads = num_threads or (os.cpu_count() or 4) * 2
+        self.start_time = None
+        self.logger = logging.getLogger('VolvoUSBVerifier')
+        self.csv_file = None
+
+    def log(self, message: str):
+        """Log message to both console and file."""
+        print(message)
+        self.logger.info(message)
 
     def verify_all(self) -> bool:
         """Run all verification checks. Returns True if all critical checks pass."""
-        print(f"Verifying USB drive at: {self.drive_path}")
-        print("=" * 70)
+        self.start_time = datetime.now()
+
+        self.log(f"Verifying USB drive at: {self.drive_path}")
+        self.log(f"Using {self.num_threads} threads for file analysis")
+        self.log("=" * 70)
 
         # Filesystem checks
         self.verify_filesystem()
@@ -83,6 +111,14 @@ class VolvoUSBVerifier:
 
         # Print report
         self.print_report()
+
+        # Export CSV of problem files
+        if self.problem_files:
+            self.export_csv()
+
+        # Print elapsed time
+        elapsed = datetime.now() - self.start_time
+        self.log(f"\nTotal execution time: {elapsed}")
 
         return len(self.errors) == 0
 
@@ -284,9 +320,15 @@ class VolvoUSBVerifier:
         folders_with_files = defaultdict(int)
         max_nesting = 0
         long_paths = []
+        folder_count = 0
 
         for root, dirs, files in os.walk(self.drive_path):
             root_path = Path(root)
+            folder_count += 1
+
+            # Progress indicator every 100 folders
+            if folder_count % 100 == 0:
+                print(f"  Scanning folder {folder_count}... ({total_files} audio files found so far)", end='\r')
 
             # Count folders
             if root_path != self.drive_path:
@@ -319,6 +361,9 @@ class VolvoUSBVerifier:
                         long_paths.append((path_str, len(path_str)))
                 except ValueError:
                     pass
+
+        # Clear progress line
+        print(" " * 80, end='\r')
 
         # Report findings
         if total_files <= self.MAX_TOTAL_FILES:
@@ -379,10 +424,11 @@ class VolvoUSBVerifier:
 
     def verify_audio_files(self):
         """Verify audio file formats, encoding, tags, etc."""
-        print("\n[3/3] Verifying audio files...")
+        self.log("\n[3/3] Verifying audio files...")
 
-        file_count = 0
-        problem_files = []
+        # First pass: collect all audio file paths
+        audio_files = []
+        unsupported_count = 0
 
         for root, dirs, files in os.walk(self.drive_path):
             for file in files:
@@ -396,35 +442,78 @@ class VolvoUSBVerifier:
                         self.errors.append(
                             f"✗ Unsupported format {ext.upper()}: {rel_path}"
                         )
+                        unsupported_count += 1
                     except ValueError:
                         pass
                     continue
 
-                # Verify supported audio files
+                # Collect supported audio files
                 if ext in self.SUPPORTED_FORMATS:
-                    file_count += 1
+                    audio_files.append(file_path)
                     self.file_stats[ext] += 1
 
-                    issues = self._verify_audio_file(file_path)
-                    if issues:
-                        problem_files.extend(issues)
+        total_files = len(audio_files)
+        self.log(f"Found {total_files} audio files to analyze{f' ({unsupported_count} unsupported)' if unsupported_count else ''}...")
+
+        # Second pass: analyze files in parallel
+        problem_files = []
+        processed = 0
+
+        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+            # Submit all file verification tasks
+            future_to_file = {
+                executor.submit(self._verify_audio_file, file_path): file_path
+                for file_path in audio_files
+            }
+
+            # Process results as they complete
+            for future in as_completed(future_to_file):
+                processed += 1
+
+                # Progress indicator every 500 files
+                if processed % 500 == 0 or processed == total_files:
+                    print(f"  Analyzed {processed}/{total_files} files... ({len(problem_files)} issues found)", end='\r')
+
+                try:
+                    file_issues = future.result()
+                    if file_issues:
+                        problem_files.extend(file_issues['display'])
+                        self.problem_files.extend(file_issues['csv'])
+                except Exception as e:
+                    file_path = future_to_file[future]
+                    try:
+                        rel_path = file_path.relative_to(self.drive_path)
+                        error_msg = f"⚠ Error processing {rel_path}: {e}"
+                        problem_files.append(error_msg)
+                        self.problem_files.append({
+                            'file_path': str(rel_path),
+                            'issue_type': 'Processing Error',
+                            'severity': 'Error',
+                            'description': str(e)
+                        })
+                    except ValueError:
+                        problem_files.append(f"⚠ Error processing file: {e}")
+
+        # Clear progress line
+        print(" " * 80, end='\r')
 
         # Report statistics
-        print(f"\nScanned {file_count} audio files:")
+        self.log(f"\nScanned {total_files} audio files:")
         for ext, count in sorted(self.file_stats.items()):
-            print(f"  {ext.upper()}: {count}")
+            self.log(f"  {ext.upper()}: {count}")
 
         # Report issues (limit output)
         if problem_files:
-            print(f"\nFound {len(problem_files)} file issues (showing first 20):")
+            self.log(f"\nFound {len(problem_files)} file issues (showing first 20):")
             for issue in problem_files[:20]:
-                print(f"  {issue}")
+                self.log(f"  {issue}")
             if len(problem_files) > 20:
-                print(f"  ... and {len(problem_files) - 20} more issues")
+                self.log(f"  ... and {len(problem_files) - 20} more issues")
 
-    def _verify_audio_file(self, file_path: Path) -> List[str]:
-        """Verify a single audio file. Returns list of issue strings."""
-        issues = []
+    def _verify_audio_file(self, file_path: Path) -> Optional[Dict]:
+        """Verify a single audio file. Returns dict with display and CSV data."""
+        display_issues = []
+        csv_issues = []
         ext = file_path.suffix.lower()
 
         try:
@@ -434,19 +523,28 @@ class VolvoUSBVerifier:
 
         try:
             if ext == '.mp3':
-                issues.extend(self._verify_mp3(file_path, rel_path))
+                display_issues, csv_issues = self._verify_mp3(file_path, rel_path)
             elif ext == '.wma':
-                issues.extend(self._verify_wma(file_path, rel_path))
+                display_issues, csv_issues = self._verify_wma(file_path, rel_path)
             elif ext in {'.m4a', '.m4b', '.aac'}:
-                issues.extend(self._verify_aac_m4a(file_path, rel_path))
+                display_issues, csv_issues = self._verify_aac_m4a(file_path, rel_path)
         except Exception as e:
-            issues.append(f"⚠ Error reading {rel_path}: {e}")
+            display_issues.append(f"⚠ Error reading {rel_path}: {e}")
+            csv_issues.append({
+                'file_path': str(rel_path),
+                'issue_type': 'Read Error',
+                'severity': 'Error',
+                'description': str(e)
+            })
 
-        return issues
+        if display_issues:
+            return {'display': display_issues, 'csv': csv_issues}
+        return None
 
-    def _verify_mp3(self, file_path: Path, rel_path: Path) -> List[str]:
-        """Verify MP3 file specifics."""
-        issues = []
+    def _verify_mp3(self, file_path: Path, rel_path: Path) -> Tuple[List[str], List[Dict]]:
+        """Verify MP3 file specifics. Returns (display_issues, csv_issues)."""
+        display_issues = []
+        csv_issues = []
 
         try:
             audio = MP3(file_path)
@@ -456,42 +554,78 @@ class VolvoUSBVerifier:
                 bitrate_kbps = audio.info.bitrate // 1000
 
                 if bitrate_kbps == self.FORBIDDEN_BITRATE:
-                    issues.append(f"✗ {rel_path}: 144 kbps is explicitly not supported")
+                    msg = f"✗ {rel_path}: 144 kbps is explicitly not supported"
+                    display_issues.append(msg)
+                    csv_issues.append({
+                        'file_path': str(rel_path),
+                        'issue_type': 'Bitrate',
+                        'severity': 'Error',
+                        'description': '144 kbps is forbidden'
+                    })
                 elif bitrate_kbps < self.MIN_BITRATE or bitrate_kbps > self.MAX_BITRATE:
-                    issues.append(
-                        f"⚠ {rel_path}: bitrate {bitrate_kbps} kbps outside "
-                        f"supported range ({self.MIN_BITRATE}-{self.MAX_BITRATE})"
-                    )
+                    msg = f"⚠ {rel_path}: bitrate {bitrate_kbps} kbps outside supported range ({self.MIN_BITRATE}-{self.MAX_BITRATE})"
+                    display_issues.append(msg)
+                    csv_issues.append({
+                        'file_path': str(rel_path),
+                        'issue_type': 'Bitrate',
+                        'severity': 'Warning',
+                        'description': f'{bitrate_kbps} kbps (range: {self.MIN_BITRATE}-{self.MAX_BITRATE})'
+                    })
 
             # Check sample rate
             if audio.info.sample_rate not in self.VALID_SAMPLE_RATES:
-                issues.append(
-                    f"⚠ {rel_path}: sample rate {audio.info.sample_rate} Hz "
-                    f"(recommended: 44100 Hz)"
-                )
+                msg = f"⚠ {rel_path}: sample rate {audio.info.sample_rate} Hz (recommended: 44100 Hz)"
+                display_issues.append(msg)
+                csv_issues.append({
+                    'file_path': str(rel_path),
+                    'issue_type': 'Sample Rate',
+                    'severity': 'Warning',
+                    'description': f'{audio.info.sample_rate} Hz (recommended: 32000, 44100, or 48000 Hz)'
+                })
 
             # Check if VBR
             if hasattr(audio.info, 'bitrate_mode'):
                 if 'VBR' in str(audio.info.bitrate_mode).upper():
-                    issues.append(
-                        f"⚠ {rel_path}: VBR encoding (CBR strongly recommended)"
-                    )
+                    msg = f"⚠ {rel_path}: VBR encoding (CBR strongly recommended)"
+                    display_issues.append(msg)
+                    csv_issues.append({
+                        'file_path': str(rel_path),
+                        'issue_type': 'Encoding',
+                        'severity': 'Warning',
+                        'description': 'VBR encoding (CBR strongly recommended)'
+                    })
 
             # Check ID3 tags
             if audio.tags:
-                tag_issues = self._verify_id3_tags(audio.tags, rel_path)
-                issues.extend(tag_issues)
+                tag_display, tag_csv = self._verify_id3_tags(audio.tags, rel_path)
+                display_issues.extend(tag_display)
+                csv_issues.extend(tag_csv)
             else:
-                issues.append(f"⚠ {rel_path}: No ID3 tags found")
+                msg = f"⚠ {rel_path}: No ID3 tags found"
+                display_issues.append(msg)
+                csv_issues.append({
+                    'file_path': str(rel_path),
+                    'issue_type': 'ID3 Tags',
+                    'severity': 'Warning',
+                    'description': 'No ID3 tags found'
+                })
 
         except Exception as e:
-            issues.append(f"⚠ {rel_path}: Error reading MP3: {e}")
+            msg = f"⚠ {rel_path}: Error reading MP3: {e}"
+            display_issues.append(msg)
+            csv_issues.append({
+                'file_path': str(rel_path),
+                'issue_type': 'Read Error',
+                'severity': 'Error',
+                'description': str(e)
+            })
 
-        return issues
+        return display_issues, csv_issues
 
-    def _verify_id3_tags(self, tags, rel_path: Path) -> List[str]:
+    def _verify_id3_tags(self, tags, rel_path: Path) -> Tuple[List[str], List[Dict]]:
         """Verify ID3 tag version and encoding."""
-        issues = []
+        display_issues = []
+        csv_issues = []
 
         # Check ID3 version
         if hasattr(tags, 'version'):
@@ -499,13 +633,25 @@ class VolvoUSBVerifier:
             if major == 2 and minor == 3:
                 pass  # ID3v2.3 is ideal
             elif major == 2 and minor == 4:
-                issues.append(
-                    f"⚠ {rel_path}: ID3v2.4 tags (ID3v2.3 recommended for compatibility)"
-                )
+                msg = f"⚠ {rel_path}: ID3v2.4 tags (ID3v2.3 recommended for compatibility)"
+                display_issues.append(msg)
+                csv_issues.append({
+                    'file_path': str(rel_path),
+                    'issue_type': 'ID3 Tags',
+                    'severity': 'Warning',
+                    'description': 'ID3v2.4 (ID3v2.3 recommended)'
+                })
             elif major == 1:
                 pass  # ID3v1 is acceptable
             else:
-                issues.append(f"⚠ {rel_path}: Unusual ID3 version {major}.{minor}")
+                msg = f"⚠ {rel_path}: Unusual ID3 version {major}.{minor}"
+                display_issues.append(msg)
+                csv_issues.append({
+                    'file_path': str(rel_path),
+                    'issue_type': 'ID3 Tags',
+                    'severity': 'Warning',
+                    'description': f'Unusual ID3 version {major}.{minor}'
+                })
 
         # Check for embedded images (album art)
         image_frames = [frame for frame in tags.values() if frame.FrameID == 'APIC']
@@ -513,16 +659,21 @@ class VolvoUSBVerifier:
             if hasattr(img_frame, 'data'):
                 img_size = len(img_frame.data)
                 if img_size > 500 * 500 * 3:  # Rough estimate
-                    issues.append(
-                        f"⚠ {rel_path}: Large embedded artwork "
-                        f"({img_size // 1024} KB, keep under ~750 KB)"
-                    )
+                    msg = f"⚠ {rel_path}: Large embedded artwork ({img_size // 1024} KB, keep under ~750 KB)"
+                    display_issues.append(msg)
+                    csv_issues.append({
+                        'file_path': str(rel_path),
+                        'issue_type': 'Album Art',
+                        'severity': 'Warning',
+                        'description': f'Large artwork: {img_size // 1024} KB'
+                    })
 
-        return issues
+        return display_issues, csv_issues
 
-    def _verify_wma(self, file_path: Path, rel_path: Path) -> List[str]:
+    def _verify_wma(self, file_path: Path, rel_path: Path) -> Tuple[List[str], List[Dict]]:
         """Verify WMA file specifics."""
-        issues = []
+        display_issues = []
+        csv_issues = []
 
         try:
             audio = ASF(file_path)
@@ -531,19 +682,31 @@ class VolvoUSBVerifier:
             if audio.info.bitrate:
                 bitrate_kbps = audio.info.bitrate // 1000
                 if bitrate_kbps < self.MIN_BITRATE or bitrate_kbps > self.MAX_BITRATE:
-                    issues.append(
-                        f"⚠ {rel_path}: bitrate {bitrate_kbps} kbps outside "
-                        f"typical range ({self.MIN_BITRATE}-{self.MAX_BITRATE})"
-                    )
+                    msg = f"⚠ {rel_path}: bitrate {bitrate_kbps} kbps outside typical range ({self.MIN_BITRATE}-{self.MAX_BITRATE})"
+                    display_issues.append(msg)
+                    csv_issues.append({
+                        'file_path': str(rel_path),
+                        'issue_type': 'Bitrate',
+                        'severity': 'Warning',
+                        'description': f'{bitrate_kbps} kbps (range: {self.MIN_BITRATE}-{self.MAX_BITRATE})'
+                    })
 
         except Exception as e:
-            issues.append(f"⚠ {rel_path}: Error reading WMA: {e}")
+            msg = f"⚠ {rel_path}: Error reading WMA: {e}"
+            display_issues.append(msg)
+            csv_issues.append({
+                'file_path': str(rel_path),
+                'issue_type': 'Read Error',
+                'severity': 'Error',
+                'description': str(e)
+            })
 
-        return issues
+        return display_issues, csv_issues
 
-    def _verify_aac_m4a(self, file_path: Path, rel_path: Path) -> List[str]:
+    def _verify_aac_m4a(self, file_path: Path, rel_path: Path) -> Tuple[List[str], List[Dict]]:
         """Verify AAC/M4A/M4B file specifics."""
-        issues = []
+        display_issues = []
+        csv_issues = []
 
         try:
             audio = MP4(file_path)
@@ -552,52 +715,112 @@ class VolvoUSBVerifier:
             if hasattr(audio, 'info'):
                 # M4P files are typically DRM-protected
                 if file_path.suffix.lower() == '.m4p':
-                    issues.append(
-                        f"✗ {rel_path}: .m4p file likely has DRM (iTunes protected)"
-                    )
+                    msg = f"✗ {rel_path}: .m4p file likely has DRM (iTunes protected)"
+                    display_issues.append(msg)
+                    csv_issues.append({
+                        'file_path': str(rel_path),
+                        'issue_type': 'DRM',
+                        'severity': 'Error',
+                        'description': 'iTunes DRM protected (m4p)'
+                    })
 
             # Check sample rate
             if hasattr(audio.info, 'sample_rate'):
                 if audio.info.sample_rate < 8000 or audio.info.sample_rate > 96000:
-                    issues.append(
-                        f"⚠ {rel_path}: sample rate {audio.info.sample_rate} Hz "
-                        f"outside supported range (8-96 kHz)"
-                    )
+                    msg = f"⚠ {rel_path}: sample rate {audio.info.sample_rate} Hz outside supported range (8-96 kHz)"
+                    display_issues.append(msg)
+                    csv_issues.append({
+                        'file_path': str(rel_path),
+                        'issue_type': 'Sample Rate',
+                        'severity': 'Warning',
+                        'description': f'{audio.info.sample_rate} Hz (range: 8-96 kHz)'
+                    })
 
         except Exception as e:
-            issues.append(f"⚠ {rel_path}: Error reading AAC/M4A: {e}")
+            msg = f"⚠ {rel_path}: Error reading AAC/M4A: {e}"
+            display_issues.append(msg)
+            csv_issues.append({
+                'file_path': str(rel_path),
+                'issue_type': 'Read Error',
+                'severity': 'Error',
+                'description': str(e)
+            })
 
-        return issues
+        return display_issues, csv_issues
+
+    def export_csv(self):
+        """Export all problem files to CSV."""
+        if not self.csv_file:
+            return
+
+        try:
+            with open(self.csv_file, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=['file_path', 'issue_type', 'severity', 'description'])
+                writer.writeheader()
+                writer.writerows(self.problem_files)
+
+            self.log(f"\nCSV report exported to: {self.csv_file}")
+            self.log(f"Total problem files: {len(self.problem_files)}")
+        except Exception as e:
+            self.log(f"\n⚠ Error exporting CSV: {e}")
 
     def print_report(self):
         """Print comprehensive verification report."""
-        print("\n" + "=" * 70)
-        print("VERIFICATION REPORT")
-        print("=" * 70)
+        self.log("\n" + "=" * 70)
+        self.log("VERIFICATION REPORT")
+        self.log("=" * 70)
 
         if self.info:
-            print("\n✓ PASSED CHECKS:")
+            self.log("\n✓ PASSED CHECKS:")
             for item in self.info:
-                print(f"  {item}")
+                self.log(f"  {item}")
 
         if self.warnings:
-            print(f"\n⚠ WARNINGS ({len(self.warnings)}):")
+            self.log(f"\n⚠ WARNINGS ({len(self.warnings)}):")
             for item in self.warnings:
-                print(f"  {item}")
+                self.log(f"  {item}")
 
         if self.errors:
-            print(f"\n✗ ERRORS ({len(self.errors)}):")
+            self.log(f"\n✗ ERRORS ({len(self.errors)}):")
             for item in self.errors:
-                print(f"  {item}")
+                self.log(f"  {item}")
 
-        print("\n" + "=" * 70)
+        self.log("\n" + "=" * 70)
         if not self.errors:
-            print("✓ RESULT: Drive appears compatible with Volvo XC70 2012!")
-            print("\nRecommendation: Test with a small subset of files first.")
+            self.log("✓ RESULT: Drive appears compatible with Volvo XC70 2012!")
+            self.log("\nRecommendation: Test with a small subset of files first.")
         else:
-            print("✗ RESULT: Issues found that may prevent proper operation.")
-            print("\nRecommendation: Address errors above before using in vehicle.")
-        print("=" * 70)
+            self.log("✗ RESULT: Issues found that may prevent proper operation.")
+            self.log("\nRecommendation: Address errors above before using in vehicle.")
+        self.log("=" * 70)
+
+
+def setup_logging(drive_path: str) -> Tuple[str, str]:
+    """Set up logging to both console and timestamped file. Returns (log_file, csv_file)."""
+    # Create logs directory if it doesn't exist
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
+
+    # Create timestamped log filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    drive_name = Path(drive_path).name or "drive"
+    log_file = log_dir / f"volvo_verify_{drive_name}_{timestamp}.log"
+    csv_file = log_dir / f"volvo_verify_{drive_name}_{timestamp}.csv"
+
+    # Configure logging
+    logger = logging.getLogger('VolvoUSBVerifier')
+    logger.setLevel(logging.INFO)
+
+    # File handler
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setLevel(logging.INFO)
+    file_formatter = logging.Formatter('%(message)s')
+    file_handler.setFormatter(file_formatter)
+
+    # Add handlers
+    logger.addHandler(file_handler)
+
+    return str(log_file), str(csv_file)
 
 
 def main():
@@ -621,8 +844,17 @@ def main():
         print(f"ERROR: Path is not a directory: {drive_path}")
         sys.exit(1)
 
+    # Set up logging
+    log_file, csv_file = setup_logging(drive_path)
+    print(f"Logging to: {log_file}\n")
+
     verifier = VolvoUSBVerifier(drive_path)
+    verifier.csv_file = csv_file
     success = verifier.verify_all()
+
+    print(f"\nLog file saved to: {log_file}")
+    if verifier.problem_files:
+        print(f"CSV report saved to: {csv_file}")
 
     sys.exit(0 if success else 1)
 
