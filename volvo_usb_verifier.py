@@ -65,6 +65,7 @@ class VolvoUSBVerifier:
     MAX_FILES_PER_FOLDER = 254
     MAX_NESTING_DEPTH = 8
     MAX_PATH_LENGTH = 60
+    MAX_FILENAME_LENGTH = 64  # Including extension
     RECOMMENDED_CLUSTER_SIZE = 32768  # 32KB
     SUPPORTED_FORMATS = {'.mp3', '.wma', '.aac', '.m4a', '.m4b'}
     UNSUPPORTED_FORMATS = {'.flac', '.ogg', '.wav', '.ape', '.alac'}
@@ -73,6 +74,8 @@ class VolvoUSBVerifier:
     MIN_BITRATE = 32
     MAX_BITRATE = 320
     MAX_ALBUM_ART_SIZE = (500, 500)
+    # Extended ASCII characters that may cause issues
+    UNSAFE_CHARS = set('üéñàèìòùáíóúäëïöüÿâêîôûãõçøåæœ¿¡«»°±²³µ¶·¸¹º¼½¾×÷')
 
     def __init__(self, drive_path: str, num_threads: Optional[int] = None):
         self.drive_path = Path(drive_path)
@@ -351,14 +354,41 @@ class VolvoUSBVerifier:
             total_files += len(audio_files)
             folders_with_files[root] = len(audio_files)
 
-            # Check path lengths
+            # Check path lengths, filenames, and invalid characters
             for file in files:
                 file_path = root_path / file
                 try:
                     relative_path = file_path.relative_to(self.drive_path)
                     path_str = str(relative_path)
+
+                    # Check path length
                     if len(path_str) > self.MAX_PATH_LENGTH:
                         long_paths.append((path_str, len(path_str)))
+                        self.problem_files.append({
+                            'file_path': path_str,
+                            'issue_type': 'Path Length',
+                            'severity': 'ERROR',
+                            'description': f'Path length {len(path_str)} exceeds maximum {self.MAX_PATH_LENGTH}'
+                        })
+
+                    # Check filename length
+                    if len(file) > self.MAX_FILENAME_LENGTH:
+                        self.problem_files.append({
+                            'file_path': path_str,
+                            'issue_type': 'Filename Length',
+                            'severity': 'ERROR',
+                            'description': f'Filename length {len(file)} exceeds maximum {self.MAX_FILENAME_LENGTH}'
+                        })
+
+                    # Check for unsafe characters
+                    unsafe_in_path = self.UNSAFE_CHARS.intersection(set(path_str))
+                    if unsafe_in_path:
+                        self.problem_files.append({
+                            'file_path': path_str,
+                            'issue_type': 'Invalid Characters',
+                            'severity': 'WARNING',
+                            'description': f'Path contains extended ASCII characters: {", ".join(sorted(unsafe_in_path))}'
+                        })
                 except ValueError:
                     pass
 
