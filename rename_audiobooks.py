@@ -259,6 +259,8 @@ def main():
     """Main entry point."""
     import argparse
 
+    print("\nAudiobook Renamer using Claude CLI\n" + "="*40 + "\n")
+
     parser = argparse.ArgumentParser(
         description='Rename audiobook files using Claude CLI',
         formatter_class=argparse.RawDescriptionHelpFormatter,
