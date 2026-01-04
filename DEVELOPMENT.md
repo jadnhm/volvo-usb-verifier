@@ -18,7 +18,11 @@ Files that work everywhere else often fail silently or cause the entire USB driv
 
 ## Project Architecture
 
-The project consists of three Python scripts that work together in a pipeline:
+The project consists of two main toolsets:
+
+### Volvo USB Media Preparation Pipeline
+
+Three Python scripts that work together in a pipeline:
 
 ### 1. `volvo_usb_verifier.py` - Detection Script
 
@@ -180,6 +184,132 @@ Would rename:
 ```
 
 **Important**: Always run in dry run mode first to review changes!
+
+---
+
+### Audiobook File Renaming Toolset
+
+A separate set of AI-powered tools for intelligently shortening audiobook file paths:
+
+#### `rename_audiobooks.py` - Main Renaming Script
+
+**Purpose**: Use Claude AI to intelligently shorten audiobook file paths while preserving essential information.
+
+**Key Features**:
+- Claude CLI integration for intelligent path analysis
+- Dry run mode by default (`--apply` flag for actual changes)
+- Example-driven prompt engineering (v7_refined prompt achieves 100% test accuracy)
+- Handles complex scenarios: multi-disc books, series, parts, etc.
+- Clean error handling and progress reporting
+
+**What It Does**:
+1. Analyzes full file paths (including directory structure)
+2. Sends each path to Claude with carefully crafted prompt
+3. Receives intelligently shortened path that:
+   - Removes redundant information (author in both dir and filename)
+   - Abbreviates long titles (e.g., "Harry Potter & Philosopher's Stone" → "HP & Philosopher's Stone")
+   - Extracts Part/Disc numbers into filename (e.g., "1-01.mp3" for Disc 1, Track 01)
+   - Replaces "and" with "&"
+   - Drops noise words ("Audiobook", "Audio Book", "Collection")
+4. Preserves essential hierarchy (Author/Series/Book/Track)
+
+**The Winning Prompt (v7_refined)**:
+- 10 example-driven patterns covering diverse cases
+- Explicit rules for edge cases
+- Requests clean output (no markdown, no explanation)
+- 100% success rate on test suite
+
+**Usage**:
+```bash
+# Dry run (default)
+python rename_audiobooks.py
+
+# Apply changes
+python rename_audiobooks.py --apply
+
+# Limit to first N files
+python rename_audiobooks.py --limit 50
+
+# Specify different directory
+python rename_audiobooks.py --dir VOLVO/books
+```
+
+**Example Transformations**:
+```
+books\1984 (George Orwell) - Audio Book\Audio Books - George Orwell - 1984 - 1 of 14.mp3
+→ books/1984/01.mp3
+
+books\Harry Potter (Jim Dale)\(1997) Harry Potter And The Philosopher's Stone\Chapter 01 - The Boy Who Lived.mp3
+→ books/Harry Potter/1997 - HP & Philosopher's Stone/01.mp3
+
+books\Roald Dahl Audiobooks\Roald Dahl - Charlie and the Chocolate Factory\(Roald Dahl) Charlie and the Chocolate Factory (Part 1) - 01.mp3
+→ books/Roald Dahl/Charlie & Chocolate Factory/1-01.mp3
+
+books\The Hobbit Audiobook\The Hobbit (Disc 01)\1-01 Ch 1a, An Unexpected Party.mp3
+→ books/Hobbit/1-01.mp3
+```
+
+**Performance**:
+- Each file requires one Claude API call (~1-2 seconds)
+- 98% success rate on sample of 50 real files
+- Occasional API timeouts (retryable)
+
+#### `test_path_shortening.py` - Test Suite
+
+**Purpose**: Validate path shortening prompts against known test cases.
+
+**Key Features**:
+- 10 comprehensive test cases covering diverse scenarios
+- Tests multiple prompt variations (v1-v7)
+- Measures match rate percentage
+- Detailed mismatch reporting
+
+**Test Cases Cover**:
+- Simple single books (1984)
+- Books with author in directory (Brave New World)
+- Series with years (Harry Potter)
+- Multi-disc books (The Hobbit)
+- Multi-part books (Roald Dahl)
+- Complex series/trilogies (William Gibson)
+- Already-simple paths (Gulliver's Travels)
+- Double-digit track numbers
+
+**Usage**:
+```bash
+# Run all prompts against all test cases
+python test_path_shortening.py
+
+# Test specific prompt
+python test_path_shortening.py v7_refined
+```
+
+**Test Results**:
+- v7_refined: 10/10 (100%)
+- v4_minimal_examples: 4/7 (57%)
+- v1_contextual: 4/7 (57%)
+
+#### `sample_rename_preview.py` - Sampling Tool
+
+**Purpose**: Quick preview by testing one file from each top-level directory.
+
+**Key Features**:
+- Samples one MP3 from each author/series directory
+- Fast way to validate prompt across entire library
+- Useful for spotting patterns that need additional test cases
+
+**Usage**:
+```bash
+python sample_rename_preview.py
+```
+
+**Output Example**:
+```
+[1/12] books\1984 (George Orwell) - Audio Book\...
+         -> books/1984/01.mp3
+
+[2/12] books\Harry Potter (Jim Dale)\...
+         -> books/Harry Potter/1997 - HP & Philosopher's Stone/01.mp3
+```
 
 ---
 
@@ -361,13 +491,22 @@ From the D: drive scan (2026-01-03):
 ## Dependencies
 
 ### Required Python Packages
+
+For Volvo USB tools:
 ```bash
 pip install mutagen
+```
+
+For audiobook renaming tools:
+```bash
+# Claude CLI (see https://github.com/anthropics/claude-code)
+# Requires Claude API access
 ```
 
 ### System Requirements
 - Python 3.7 or higher
 - Works on Windows, Linux, macOS
+- Claude API key (for audiobook renaming tools only)
 
 ### Optional Tools for Manual Fixing
 - **MP3tag** - ID3 tag editor (https://www.mp3tag.de/)
@@ -448,14 +587,20 @@ From `Volvo-stereo.md` research:
 
 ```
 .
-├── volvo_usb_verifier.py     # Main detection script
-├── volvo_usb_fixer.py         # ID3 tag fixer
-├── volvo_path_fixer.py        # Path/filename fixer
-├── Volvo-stereo.md            # Research/specifications
-├── README.md                  # User documentation
-├── DEVELOPMENT.md             # This file
-├── .gitignore                 # Excludes logs/, *.log
-└── logs/                      # Generated by scripts (gitignored)
+├── volvo_usb_verifier.py        # Main detection script
+├── volvo_usb_fixer.py           # ID3 tag fixer
+├── volvo_path_fixer.py          # Path/filename fixer
+├── rename_audiobooks.py         # AI-powered audiobook path shortener
+├── test_path_shortening.py      # Test suite for audiobook renaming
+├── sample_rename_preview.py     # Quick sampling tool
+├── Volvo-stereo.md              # Research/specifications
+├── README.md                    # User documentation
+├── DEVELOPMENT.md               # This file (development docs)
+├── AUDIOBOOK_RENAMING.md        # Audiobook renaming documentation
+├── .gitignore                   # Excludes logs/, *.log, test outputs
+├── VOLVO/                       # Test data directory
+│   └── books/                   # Audiobook files (3,688 MP3s)
+└── logs/                        # Generated by scripts (gitignored)
     ├── volvo_verify_*.log
     ├── volvo_verify_*.csv
     ├── volvo_fixer_*.log
@@ -495,14 +640,21 @@ This project is provided as-is for personal use. No warranty is provided.
 
 ## Session Notes
 
-**Last Updated**: 2026-01-03
+**Last Updated**: 2026-01-04
 
 **Current State**:
-- All three scripts functional and tested
+- All three Volvo USB scripts functional and tested
 - Verifier updated to detect path/filename issues (added 2026-01-03)
 - CSV export includes all issue types
 - Test data: 55,420 problem files identified on D: drive
 - Path fixer created but not yet tested on real data
+- **NEW**: Audiobook renaming toolset completed and tested (added 2026-01-04)
+  - rename_audiobooks.py - Main AI-powered renaming script
+  - test_path_shortening.py - Test suite with 10 test cases (100% passing)
+  - sample_rename_preview.py - Quick sampling tool
+  - v7_refined prompt achieves 100% test accuracy
+  - Tested on 50 real files with 98% success rate
+  - Documentation: AUDIOBOOK_RENAMING.md
 
 **Next Steps**:
 1. Test path fixer dry run on D: drive
@@ -510,3 +662,5 @@ This project is provided as-is for personal use. No warranty is provided.
 3. Add conflict detection for duplicate names after shortening
 4. Document re-encoding workflow for VBR/sample rate issues
 5. Create example folder structure for organizing <15K files
+6. **Audiobook tools**: Add retry logic for Claude API timeouts
+7. **Audiobook tools**: Consider batch processing for better API efficiency

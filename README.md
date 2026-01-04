@@ -4,11 +4,21 @@ A complete Python toolchain for preparing USB drives with media files for the 20
 
 ## Project Overview
 
-This project consists of three Python scripts that work together:
+This project consists of two main toolsets:
+
+### Volvo USB Media Preparation Tools
 
 1. **`volvo_usb_verifier.py`** - Scans your USB drive and identifies all compatibility issues
 2. **`volvo_usb_fixer.py`** - Automatically fixes ID3 tag issues (lossless)
 3. **`volvo_path_fixer.py`** - Automatically fixes filename and character issues
+
+### Audiobook File Renaming Tools
+
+1. **`rename_audiobooks.py`** - Intelligently shortens audiobook paths using Claude AI
+2. **`test_path_shortening.py`** - Test suite for path shortening prompts
+3. **`sample_rename_preview.py`** - Quick preview tool for sampling directories
+
+See `AUDIOBOOK_RENAMING.md` for detailed documentation on the audiobook renaming toolset.
 
 ## Installation
 
@@ -23,6 +33,11 @@ This project consists of three Python scripts that work together:
    ```bash
    pip install mutagen
    ```
+
+3. **Claude CLI** (optional - only for audiobook renaming tools)
+   - Required for `rename_audiobooks.py`
+   - Installation: https://github.com/anthropics/claude-code
+   - Requires Claude API access
 
 ## The Scripts
 
@@ -464,4 +479,38 @@ Based on specifications compiled from:
 
 ---
 
-**Last Updated**: 2026-01-03
+## Audiobook File Renaming
+
+For audiobooks with extremely long paths, use the AI-powered renaming tools:
+
+```bash
+# Preview changes (dry run)
+python rename_audiobooks.py
+
+# Apply changes after review
+python rename_audiobooks.py --apply
+
+# Test on first 10 files only
+python rename_audiobooks.py --limit 10
+```
+
+**Example transformations:**
+```
+BEFORE: books\1984 (George Orwell) - Audio Book\Audio Books - George Orwell - 1984 - 1 of 14.mp3
+AFTER:  books/1984/01.mp3
+
+BEFORE: books\Harry Potter (Jim Dale)\(1997) Harry Potter And The Philosopher's Stone\Chapter 01 - The Boy Who Lived.mp3
+AFTER:  books/Harry Potter/1997 - HP & Philosopher's Stone/01.mp3
+```
+
+The AI-powered tool intelligently:
+- Removes redundant information (author names, "Audio Book", etc.)
+- Abbreviates long titles while preserving meaning
+- Extracts disc/part numbers into filenames
+- Maintains proper hierarchy (Author/Series/Book/Track)
+
+See `AUDIOBOOK_RENAMING.md` for complete documentation and examples.
+
+---
+
+**Last Updated**: 2026-01-04
