@@ -45,3 +45,5 @@ volvo_verify_temp.txt
 # Log files
 logs/
 *.log
+
+VOLVO/
