@@ -14,9 +14,10 @@ This project consists of two main toolsets:
 
 ### Audiobook File Renaming Tools
 
-1. **`rename_audiobooks.py`** - Intelligently shortens audiobook paths using Claude AI
-2. **`test_path_shortening.py`** - Test suite for path shortening prompts
-3. **`sample_rename_preview.py`** - Quick preview tool for sampling directories
+1. **`rename_audiobooks_batch.py`** - **RECOMMENDED** - Batch renaming (93% fewer API calls)
+2. **`rename_audiobooks.py`** - Per-file renaming (simple but more expensive)
+3. **`test_path_shortening.py`** - Test suite for path shortening prompts
+4. **`sample_rename_preview.py`** - Quick preview tool for sampling directories
 
 See `AUDIOBOOK_RENAMING.md` for detailed documentation on the audiobook renaming toolset.
 
@@ -481,18 +482,20 @@ Based on specifications compiled from:
 
 ## Audiobook File Renaming
 
-For audiobooks with extremely long paths, use the AI-powered renaming tools:
+For audiobooks with extremely long paths, use the AI-powered batch renaming tool (**recommended**):
 
 ```bash
-# Preview changes (dry run)
-python rename_audiobooks.py
+# Preview changes (dry run) - RECOMMENDED
+python rename_audiobooks_batch.py
+
+# Preview first 100 files
+python rename_audiobooks_batch.py --limit 100
 
 # Apply changes after review
-python rename_audiobooks.py --apply
-
-# Test on first 10 files only
-python rename_audiobooks.py --limit 10
+python rename_audiobooks_batch.py --apply
 ```
+
+The batch script is **93% more efficient** - it makes one API call per book instead of per file (e.g., 7 calls for 100 files instead of 100 calls).
 
 **Example transformations:**
 ```
