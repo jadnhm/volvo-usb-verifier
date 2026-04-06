@@ -85,8 +85,13 @@ def extract_track_number(filename):
     return None
 
 
-def get_book_pattern(sample_path, base_dir):
-    """Use Claude CLI to get shortened path pattern for a book."""
+def get_book_pattern(sample_path, base_dir, max_retries=3):
+    """
+    Use Claude CLI to get shortened path pattern for a book.
+    Retries with exponential backoff on timeouts.
+    """
+    import time
+
     try:
         rel_path = Path(sample_path).relative_to(Path(base_dir).parent)
     except ValueError:
@@ -96,40 +101,61 @@ def get_book_pattern(sample_path, base_dir):
     prompt_path = str(rel_path).replace('/', '\\')
     prompt = V7_PROMPT.format(path=prompt_path)
 
-    try:
-        result = subprocess.run(
-            ['claude', '--print', prompt],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            encoding='utf-8'
-        )
+    for attempt in range(max_retries):
+        try:
+            # Increase timeout on retries
+            timeout = 30 + (attempt * 15)  # 30s, 45s, 60s
 
-        output = result.stdout.strip()
-        lines = [line.strip() for line in output.split('\n') if line.strip()]
+            result = subprocess.run(
+                ['claude', '--print', prompt],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                encoding='utf-8'
+            )
 
-        # Find the line that looks like a path
-        for line in reversed(lines):
-            cleaned = line.replace('`', '').replace('**', '').strip()
+            output = result.stdout.strip()
+            lines = [line.strip() for line in output.split('\n') if line.strip()]
 
-            # Skip error messages
-            if 'error' in cleaned.lower() or 'timeout' in cleaned.lower():
+            # Find the line that looks like a path
+            for line in reversed(lines):
+                cleaned = line.replace('`', '').replace('**', '').strip()
+
+                # Skip error messages
+                if 'error' in cleaned.lower() or 'timeout' in cleaned.lower():
+                    continue
+
+                if 'books/' in cleaned.lower() and '.mp3' in cleaned.lower():
+                    # Remove any prefix like "Shortened:" or similar
+                    if ':' in cleaned:
+                        cleaned = cleaned.split(':', 1)[1].strip()
+
+                    if attempt > 0:
+                        print(f"  [Retry {attempt} succeeded]")
+                    return cleaned
+
+            # No valid path found in output
+            if attempt < max_retries - 1:
+                print(f"  [No valid output, retrying {attempt + 1}/{max_retries}...]")
+                time.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
                 continue
+            return None
 
-            if 'books/' in cleaned.lower() and '.mp3' in cleaned.lower():
-                # Remove any prefix like "Shortened:" or similar
-                if ':' in cleaned:
-                    cleaned = cleaned.split(':', 1)[1].strip()
-                return cleaned
+        except subprocess.TimeoutExpired:
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt
+                print(f"  [Timeout, retrying {attempt + 1}/{max_retries} in {wait_time}s...]")
+                time.sleep(wait_time)
+                continue
+            else:
+                print(f"  [ERROR] Timeout after {max_retries} attempts")
+                return None
 
-        return None
+        except Exception as e:
+            print(f"  [ERROR] {e}")
+            return None
 
-    except subprocess.TimeoutExpired:
-        print(f"  ERROR: Timeout processing {sample_path}")
-        return None
-    except Exception as e:
-        print(f"  ERROR: {e}")
-        return None
+    return None
 
 
 def group_files_by_book(files, base_dir):
