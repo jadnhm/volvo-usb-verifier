@@ -67,6 +67,23 @@ class VolvoUSBFixer:
         print(message)
         self.logger.info(message)
 
+    def warn_if_csv_may_be_stale(self):
+        """Warn when a newer path manifest exists than the verifier CSV being used."""
+        csv_mtime = self.csv_file.stat().st_mtime
+        manifest_dir = self.csv_file.parent
+        manifest_files = sorted(manifest_dir.glob('volvo_path_manifest_*.csv'))
+
+        newer_manifests = [manifest for manifest in manifest_files if manifest.stat().st_mtime > csv_mtime]
+        if not newer_manifests:
+            return
+
+        newest_manifest = newer_manifests[-1]
+        self.log("\n⚠ WARNING: Newer path rename manifest detected than the verifier CSV in use.")
+        self.log(f"  CSV in use: {self.csv_file}")
+        self.log(f"  Newer manifest: {newest_manifest}")
+        self.log("  Applied renames can make verifier CSV file paths stale for this fixer.")
+        self.log("  Recommended: re-run volvo_usb_verifier.py and use the fresh CSV before applying ID3 fixes.")
+
     def load_issues(self) -> Dict[str, List[Dict]]:
         """Load issues from CSV file, grouped by file path."""
         issues_by_file = defaultdict(list)
@@ -95,6 +112,8 @@ class VolvoUSBFixer:
             self.log("\n⚠ DRY RUN: No files will be modified. Use --apply to make changes.")
         else:
             self.log("\n⚠ LIVE MODE: Files will be modified in place!")
+
+        self.warn_if_csv_may_be_stale()
 
         # Load issues
         issues_by_file = self.load_issues()

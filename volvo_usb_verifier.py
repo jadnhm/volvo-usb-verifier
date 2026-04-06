@@ -68,7 +68,7 @@ class VolvoUSBVerifier:
     MAX_FILENAME_LENGTH = 64  # Including extension
     RECOMMENDED_CLUSTER_SIZE = 32768  # 32KB
     SUPPORTED_FORMATS = {'.mp3', '.wma', '.aac', '.m4a', '.m4b'}
-    UNSUPPORTED_FORMATS = {'.flac', '.ogg', '.wav', '.ape', '.alac'}
+    UNSUPPORTED_FORMATS = {'.flac', '.ogg', '.wav', '.ape', '.alac', '.aiff', '.aif'}
     FORBIDDEN_BITRATE = 144
     VALID_SAMPLE_RATES = {32000, 44100, 48000}
     MIN_BITRATE = 32
@@ -472,6 +472,12 @@ class VolvoUSBVerifier:
                         self.errors.append(
                             f"✗ Unsupported format {ext.upper()}: {rel_path}"
                         )
+                        self.problem_files.append({
+                            'file_path': str(rel_path),
+                            'issue_type': 'Unsupported Format',
+                            'severity': 'ERROR',
+                            'description': f'Format {ext.upper()} is not supported by the Volvo XC70 stereo',
+                        })
                         unsupported_count += 1
                     except ValueError:
                         pass

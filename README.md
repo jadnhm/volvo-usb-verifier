@@ -101,6 +101,10 @@ music\song.mp3,ID3 Tags,WARNING,ID3v2.4 (ID3v2.3 recommended)
 
 **Input**: CSV file from `volvo_usb_verifier.py`
 
+**Workflow Note**: This script uses the exact `file_path` values from the verifier CSV. If you have already applied renames with `volvo_path_fixer.py`, re-run the verifier first and use the fresh CSV here.
+
+**Stale Input Warning**: The fixer now warns when it sees a newer `logs/volvo_path_manifest_*.csv` than the verifier CSV you passed in.
+
 **Usage**:
 ```bash
 # Dry run (preview changes)
@@ -164,6 +168,9 @@ python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --appl
 
 **Input**: CSV file from `volvo_usb_verifier.py`
 
+**Additional Output**:
+- `logs/volvo_path_manifest_YYYYMMDD_HHMMSS.csv` - Rename manifest showing original path, new path, status, warnings, and errors
+
 **Usage**:
 ```bash
 # Dry run (preview changes)
@@ -190,6 +197,17 @@ File with issues (cannot fix):
 ---
 
 ## Complete Workflow
+
+**Pipeline Helper**:
+```bash
+# Dry-run the full workflow
+python volvo_pipeline.py D:/
+
+# Apply path fixes and ID3 fixes in one coordinated run
+python volvo_pipeline.py D:/ --apply-path --apply-id3
+```
+
+This helper runs `verify -> path fix -> verify -> ID3 fix -> verify` and automatically uses the fresh verifier CSV after path changes.
 
 ### Step 1: Format Your USB Drive
 
@@ -249,7 +267,10 @@ Review the log files to understand all issues found.
 
 ### Step 4: Fix Filename Issues (Optional)
 
-**IMPORTANT**: Run this BEFORE the ID3 fixer because renaming files invalidates CSV paths.
+**IMPORTANT**:
+- Run this before the ID3 fixer if you want the cleanest pipeline.
+- If you apply renames, the original verifier CSV becomes stale for downstream tools.
+- Re-run the verifier after applied renames, then use the fresh CSV with `volvo_usb_fixer.py`.
 
 **Basic Usage**:
 ```bash
@@ -281,7 +302,15 @@ Fixes:
 Reports (but doesn't fix):
 - Long paths (>60 chars) - requires manual folder renaming
 
-### Step 5: Fix ID3 Tag Issues
+### Step 5: Re-verify After Applied Renames
+
+```bash
+python volvo_usb_verifier.py D:/
+```
+
+Use the fresh CSV from this second scan when running the ID3 fixer.
+
+### Step 6: Fix ID3 Tag Issues
 
 **Basic Usage**:
 ```bash
@@ -312,7 +341,7 @@ Fixes:
 - Large album artwork removal
 - Adds both ID3v1 and ID3v2.3 for compatibility
 
-### Step 6: Re-verify
+### Step 7: Re-verify
 
 ```bash
 python volvo_usb_verifier.py D:/
@@ -325,7 +354,7 @@ Check the new report to see remaining issues that require manual intervention:
 - Path length issues (requires manual folder renaming)
 - Too many files (requires splitting across multiple drives)
 
-### Step 7: Handle Remaining Issues Manually
+### Step 8: Handle Remaining Issues Manually
 
 **For VBR/Sample Rate/Bitrate Issues**:
 Use [foobar2000](https://www.foobar2000.org/) to re-encode:
@@ -345,7 +374,7 @@ Split content across multiple 32GB USB drives:
 - Drive 2: Music A-M
 - Drive 3: Music N-Z
 
-### Step 8: Test in Vehicle
+### Step 9: Test in Vehicle
 
 **IMPORTANT**: Always test with a small subset first!
 

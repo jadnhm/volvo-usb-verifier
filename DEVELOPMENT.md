@@ -106,6 +106,8 @@ python volvo_usb_verifier.py D:/
 
 **Input**: CSV file from `volvo_usb_verifier.py`
 
+**Workflow Note**: This script resolves files by the exact `file_path` values stored in the verifier CSV. If `volvo_path_fixer.py` has renamed files since that CSV was generated, this script can report "File not found" for the old paths. Re-run the verifier after any applied renames and use the fresh CSV here.
+
 **Usage**:
 ```bash
 # Dry run (preview changes)
@@ -129,13 +131,14 @@ python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --appl
 
 ### 3. `volvo_path_fixer.py` - Path/Filename Fixer
 
-**Purpose**: Automatically fix path length, filename length, and invalid character issues by renaming files and folders.
+**Purpose**: Automatically fix filename length and invalid character issues by renaming files. It also reports path length issues that still require manual intervention.
 
 **Key Features**:
 - Intelligent abbreviation system
 - Preserves track numbers at beginning of filenames
 - Dry run mode by default
 - Creates parent directories as needed
+- Writes a timestamped rename manifest to `logs/` so downstream steps can see exactly what changed
 
 **What It Fixes**:
 1. **Invalid characters** - Replaces extended ASCII with safe alternatives
@@ -144,10 +147,10 @@ python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --appl
    - Applies abbreviations: "Remastered" → "Rmstr", "Deluxe" → "Dlx"
    - Removes "The " prefix
    - Preserves track numbers
-3. **Long paths** - Shortens directory names to get paths under 60 characters
-   - Applies same abbreviations to folder names
-   - Removes spaces if needed
-   - Truncates intelligently
+3. **Rename manifest** - Records every processed file in `logs/volvo_path_manifest_YYYYMMDD_HHMMSS.csv`
+    - Captures original path, new path, status, warnings, and errors
+    - Keeps the verifier CSV immutable as a snapshot of scan results
+    - Makes it obvious when a fresh verifier CSV is needed before running the ID3 fixer
 
 **Abbreviation Dictionary**:
 ```python
@@ -165,6 +168,11 @@ python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --appl
 
 **Input**: CSV file from `volvo_usb_verifier.py`
 
+**Important Behavior**:
+- This script uses the verifier CSV as input.
+- When run with `--apply`, it can rename files so the original verifier CSV becomes stale for later steps.
+- After applied renames, run `volvo_usb_verifier.py` again before using `volvo_usb_fixer.py`.
+
 **Usage**:
 ```bash
 # Dry run (preview changes)
@@ -178,12 +186,29 @@ python volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --app
 ```
 Would rename:
   FROM: audiobooks\The Hobbit Audiobook\The Hobbit (Disc 01)\1-01 Ch 1a, An Unexpected Party.mp3
-  TO:   audiobooks\Hobbit Audiobook\Hobbit (Disc 01)\1-01 Ch 1a, Unexpected Party.mp3
+    TO:   audiobooks\The Hobbit Audiobook\The Hobbit (Disc 01)\1-01 Ch 1a, Unexpected Party.mp3
     - Replaced invalid characters
-    - Shortened path to 58 chars
+        - Shortened filename to 41 chars
 ```
 
 **Important**: Always run in dry run mode first to review changes!
+
+**Manifest Output**:
+```csv
+timestamp,source_csv,original_path,new_path,status,actions,warnings,error
+2026-04-06T10:15:03,logs/volvo_verify_drive_20260406_101500.csv,music\Artist\Long Name.mp3,music\Artist\Short Name.mp3,renamed,Shortened filename to 60 chars,,
+2026-04-06T10:15:04,logs/volvo_verify_drive_20260406_101500.csv,books\Deep\Path\File.mp3,books\Deep\Path\File.mp3,warning_only,,⚠ WARNING: Path is 88 chars (exceeds 60 limit),
+```
+
+### Workflow Findings (April 2026)
+
+- `volvo_path_fixer.py` and `volvo_usb_fixer.py` both consume the verifier CSV as input.
+- Running the ID3 fixer before the path fixer is safe because it edits files in place and does not change their paths.
+- Running the path fixer with `--apply` before the ID3 fixer can make the original verifier CSV stale.
+- The correct pipeline after renames is: verify -> path fixer -> re-verify -> ID3 fixer.
+- The verifier CSV should be treated as an immutable scan snapshot. Rename operations should be recorded in a separate manifest instead of rewriting the original CSV.
+- `volvo_usb_fixer.py` now warns when it detects a newer path manifest than the verifier CSV being used.
+- `volvo_pipeline.py` coordinates the preferred workflow end-to-end and automatically feeds the fresh verifier CSV into the ID3 fixer.
 
 ---
 
@@ -351,9 +376,18 @@ python volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
 python volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
 ```
 
-**Important**: Run this BEFORE the ID3 fixer because renaming files invalidates the CSV paths.
+**Important**:
+- This script writes `logs/volvo_path_manifest_YYYYMMDD_HHMMSS.csv` containing the rename plan or applied changes.
+- If you apply renames, the original verifier CSV may no longer match the current file paths.
 
-### Step 3: Fix ID3 Tag Issues
+### Step 3: Re-verify After Applied Renames
+```bash
+python volvo_usb_verifier.py D:/
+```
+
+Use the fresh verifier CSV for all downstream steps after any applied renames.
+
+### Step 4: Fix ID3 Tag Issues
 ```bash
 # Dry run first
 python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
@@ -362,14 +396,14 @@ python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
 python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
 ```
 
-### Step 4: Re-verify
+### Step 5: Re-verify
 ```bash
 python volvo_usb_verifier.py D:/
 ```
 
 Check the new CSV to see remaining issues (encoding, sample rate, etc.).
 
-### Step 5: Test in Vehicle
+### Step 6: Test in Vehicle
 Always test with a small subset (20-30 files) before loading the full library.
 
 ---

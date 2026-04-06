@@ -10,13 +10,16 @@ Two independent toolsets live in this repo:
 
 ### 1. Volvo USB Preparation Pipeline (main toolset)
 
-Three scripts that work in a strict pipeline order:
+Scripts that work in a coordinated pipeline — run via `volvo_pipeline.py` or individually:
 
 1. **`volvo_usb_verifier.py`** — Scans a USB drive, outputs a timestamped `.log` + `.csv` to `logs/`
-2. **`volvo_path_fixer.py`** — Renames files/folders to fix filename length and invalid characters. **Run this before the ID3 fixer** — renaming invalidates CSV paths.
-3. **`volvo_usb_fixer.py`** — Fixes ID3 tags losslessly (version, missing tags, oversized art). Takes the CSV from the verifier as input.
+2. **`volvo_path_fixer.py`** — Renames files/folders to fix filename length and invalid characters. Outputs a rename manifest. **Run before the converter and ID3 fixer** — renaming invalidates CSV paths.
+3. **`volvo_converter.py`** — Converts lossless/uncompressed files (FLAC, WAV, AIFF, APE, ALAC) to AAC 192kbps M4A. Requires `ffmpeg` on PATH. Outputs a conversion manifest.
+4. **`volvo_usb_fixer.py`** — Fixes ID3 tags losslessly (version, missing tags, oversized art). Takes the CSV from the verifier as input.
+5. **`volvo_pipeline.py`** — Coordinator: runs verify → path-fix → re-verify → convert → re-verify → ID3-fix → final verify in one command.
 
-All three support dry-run mode by default; pass `--apply` to make changes.
+All scripts support dry-run mode by default; pass `--apply` to make changes.
+Pipeline flags: `--apply-path`, `--apply-convert`, `--keep-originals-convert`, `--apply-id3`.
 
 ### 2. Audiobook Renaming Toolset (AI-assisted)
 

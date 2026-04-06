@@ -77,10 +77,11 @@ class VolvoPathFixer:
     MAX_PATH_LENGTH = 60
     MAX_FILENAME_LENGTH = 64
 
-    def __init__(self, csv_file: str, drive_path: str, dry_run: bool = True):
+    def __init__(self, csv_file: str, drive_path: str, dry_run: bool = True, manifest_file: Optional[str] = None):
         self.csv_file = Path(csv_file)
         self.drive_path = Path(drive_path)
         self.dry_run = dry_run
+        self.manifest_file = Path(manifest_file) if manifest_file else None
         self.logger = logging.getLogger('VolvoPathFixer')
 
         # Statistics
@@ -89,6 +90,7 @@ class VolvoPathFixer:
         self.failed_files = []
         self.renamed_dirs = {}  # Track directory renames {old_path: new_path}
         self.paths_too_long = []  # Paths that exceed 60 chars (for reporting only)
+        self.manifest_rows = []
 
     def log(self, message: str):
         """Log message to both console and file."""
@@ -150,6 +152,8 @@ class VolvoPathFixer:
 
             self._process_file(file_path, issues)
 
+        self.write_manifest()
+
         # Print summary
         self.print_summary()
 
@@ -159,6 +163,14 @@ class VolvoPathFixer:
 
         if not full_path.exists():
             self.failed_files.append((file_path, "File not found"))
+            self._record_manifest(
+                original_path=file_path,
+                new_path='',
+                status='failed',
+                actions=[],
+                warnings=[],
+                error='File not found',
+            )
             return
 
         # Determine what issues exist
@@ -187,6 +199,9 @@ class VolvoPathFixer:
             self.paths_too_long.append((file_path, str(new_path), len(str(new_path))))
             fixes_applied.append(f"⚠ WARNING: Path is {len(str(new_path))} chars (exceeds 60 limit)")
 
+        warning_messages = [fix for fix in fixes_applied if fix.startswith("⚠ WARNING:")]
+        action_messages = [fix for fix in fixes_applied if not fix.startswith("⚠ WARNING:")]
+
         # Report on this file if there are any issues
         if fixes_applied:
             # Something to report (fixes or warnings)
@@ -199,6 +214,14 @@ class VolvoPathFixer:
                     for fix in fixes_applied:
                         self.log(f"    - {fix}")
                     self.fixed_files.append((file_path, str(new_path)))
+                    self._record_manifest(
+                        original_path=file_path,
+                        new_path=str(new_path),
+                        status='would_rename',
+                        actions=action_messages,
+                        warnings=warning_messages,
+                        error='',
+                    )
                 else:
                     # Perform actual rename
                     try:
@@ -210,9 +233,25 @@ class VolvoPathFixer:
                             self.log(f"    - {fix}")
                         self.fixed_files.append((file_path, str(new_path)))
                         self.stats['files_renamed'] += 1
+                        self._record_manifest(
+                            original_path=file_path,
+                            new_path=str(new_path),
+                            status='renamed',
+                            actions=action_messages,
+                            warnings=warning_messages,
+                            error='',
+                        )
                     except Exception as e:
                         self.log(f"✗ Failed to rename {file_path}: {e}")
                         self.failed_files.append((file_path, str(e)))
+                        self._record_manifest(
+                            original_path=file_path,
+                            new_path=str(new_path),
+                            status='failed',
+                            actions=action_messages,
+                            warnings=warning_messages,
+                            error=str(e),
+                        )
             else:
                 # File has issues but won't be renamed (path too long only)
                 if self.dry_run:
@@ -220,6 +259,54 @@ class VolvoPathFixer:
                     self.log(f"  PATH: {file_path}")
                     for fix in fixes_applied:
                         self.log(f"    - {fix}")
+                self._record_manifest(
+                    original_path=file_path,
+                    new_path=str(new_path),
+                    status='warning_only',
+                    actions=action_messages,
+                    warnings=warning_messages,
+                    error='',
+                )
+
+    def _record_manifest(self, original_path: str, new_path: str, status: str,
+                         actions: List[str], warnings: List[str], error: str):
+        """Record the outcome for one processed file in the rename manifest."""
+        self.manifest_rows.append({
+            'timestamp': datetime.now().isoformat(timespec='seconds'),
+            'source_csv': str(self.csv_file),
+            'original_path': original_path,
+            'new_path': new_path,
+            'status': status,
+            'actions': '; '.join(actions),
+            'warnings': '; '.join(warnings),
+            'error': error,
+        })
+
+    def write_manifest(self):
+        """Write a rename manifest so downstream steps can see path changes clearly."""
+        if not self.manifest_file:
+            return
+
+        try:
+            with open(self.manifest_file, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(
+                    f,
+                    fieldnames=[
+                        'timestamp',
+                        'source_csv',
+                        'original_path',
+                        'new_path',
+                        'status',
+                        'actions',
+                        'warnings',
+                        'error',
+                    ]
+                )
+                writer.writeheader()
+                writer.writerows(self.manifest_rows)
+            self.log(f"Rename manifest saved to: {self.manifest_file}")
+        except Exception as e:
+            self.log(f"ERROR: Failed to write rename manifest: {e}")
 
     def _fix_invalid_chars(self, path_str: str) -> str:
         """Replace invalid characters with safe alternatives."""
@@ -267,6 +354,8 @@ class VolvoPathFixer:
         self.log(f"\nStatistics:")
         self.log(f"  Files that would be renamed: {len(self.fixed_files)}")
         self.log(f"  Files with errors: {len(self.failed_files)}")
+        if self.manifest_file:
+            self.log(f"  Rename manifest: {self.manifest_file}")
 
         if self.stats:
             self.log(f"\nFixes that would be applied:" if self.dry_run else f"\nFixes applied:")
@@ -304,13 +393,14 @@ class VolvoPathFixer:
         self.log(f"{'='*70}")
 
 
-def setup_logging() -> str:
-    """Set up logging to timestamped file."""
+def setup_logging() -> Tuple[str, str]:
+    """Set up output files for logging and rename manifest."""
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = log_dir / f"volvo_path_fixer_{timestamp}.log"
+    manifest_file = log_dir / f"volvo_path_manifest_{timestamp}.csv"
 
     logger = logging.getLogger('VolvoPathFixer')
     logger.setLevel(logging.INFO)
@@ -322,7 +412,7 @@ def setup_logging() -> str:
 
     logger.addHandler(file_handler)
 
-    return str(log_file)
+    return str(log_file), str(manifest_file)
 
 
 def main():
@@ -364,15 +454,17 @@ WARNING: Always backup your files before running with --apply!
         sys.exit(1)
 
     # Set up logging
-    log_file = setup_logging()
+    log_file, manifest_file = setup_logging()
     print(f"Logging to: {log_file}\n")
+    print(f"Rename manifest will be saved to: {manifest_file}\n")
 
     # Run fixer
     dry_run = not args.apply
-    fixer = VolvoPathFixer(args.csv_file, args.drive_path, dry_run=dry_run)
+    fixer = VolvoPathFixer(args.csv_file, args.drive_path, dry_run=dry_run, manifest_file=manifest_file)
     fixer.fix_all()
 
     print(f"\nLog file saved to: {log_file}")
+    print(f"Rename manifest saved to: {manifest_file}")
 
 
 if __name__ == "__main__":
