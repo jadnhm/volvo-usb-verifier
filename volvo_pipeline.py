@@ -39,6 +39,14 @@ def check_ffmpeg():
     sys.exit(1)
 
 
+def run_cleaner(python_cmd: str, script_dir: Path, drive_path: str, apply_changes: bool):
+    """Run junk-file cleaner as an optional pre-step."""
+    command = [python_cmd, str(script_dir / 'volvo_usb_cleaner.py'), drive_path]
+    if apply_changes:
+        command.append('--apply')
+    run_step(command, 'Step 0: Clean junk files')
+
+
 def run_step(command, label: str, allowed_exit_codes: Optional[Set[int]] = None):
     """Run a pipeline step and stop on unexpected exit codes."""
     if allowed_exit_codes is None:
@@ -132,6 +140,7 @@ Examples:
         """
     )
     parser.add_argument('drive_path', help='Path to USB drive or media folder')
+    parser.add_argument('--apply-clean', action='store_true', help='Delete junk/metadata files instead of dry-run')
     parser.add_argument('--apply-path', action='store_true', help='Apply path fixes instead of dry-run')
     parser.add_argument('--apply-convert', action='store_true', help='Apply lossless conversions instead of dry-run')
     parser.add_argument('--keep-originals-convert', action='store_true',
@@ -146,6 +155,8 @@ Examples:
     python_cmd = sys.executable
 
     check_ffmpeg()
+
+    run_cleaner(python_cmd, script_dir, args.drive_path, args.apply_clean)
 
     initial_csv = run_verifier(python_cmd, script_dir, args.drive_path, log_dir, 'Step 1: Verify drive state')
     print(f"Verifier CSV: {initial_csv}")

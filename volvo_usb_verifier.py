@@ -704,6 +704,19 @@ class VolvoUSBVerifier:
                         'description': f'Large artwork: {img_size // 1024} KB'
                     })
 
+        # Track numbers help the stereo keep album order predictable.
+        track_frames = tags.getall('TRCK') if hasattr(tags, 'getall') else []
+        has_track_number = any(getattr(frame, 'text', None) for frame in track_frames)
+        if not has_track_number:
+            msg = f"⚠ {rel_path}: Missing track number tag (album playback may sort unpredictably)"
+            display_issues.append(msg)
+            csv_issues.append({
+                'file_path': str(rel_path),
+                'issue_type': 'Track Number',
+                'severity': 'Warning',
+                'description': 'Missing track number tag'
+            })
+
         return display_issues, csv_issues
 
     def _verify_wma(self, file_path: Path, rel_path: Path) -> Tuple[List[str], List[Dict]]:
@@ -770,6 +783,35 @@ class VolvoUSBVerifier:
                         'issue_type': 'Sample Rate',
                         'severity': 'Warning',
                         'description': f'{audio.info.sample_rate} Hz (range: 8-96 kHz)'
+                    })
+
+            # Check for oversized album art
+            if audio.tags:
+                for cover in audio.tags.get('covr', []):
+                    img_size = len(bytes(cover))
+                    if img_size > 500 * 500 * 3:  # ~750 KB rough estimate
+                        msg = f"⚠ {rel_path}: Large embedded artwork ({img_size // 1024} KB, keep under ~750 KB)"
+                        display_issues.append(msg)
+                        csv_issues.append({
+                            'file_path': str(rel_path),
+                            'issue_type': 'Album Art',
+                            'severity': 'Warning',
+                            'description': f'Large artwork: {img_size // 1024} KB',
+                        })
+
+                track_values = audio.tags.get('trkn', [])
+                has_track_number = any(
+                    isinstance(value, tuple) and value and value[0] > 0
+                    for value in track_values
+                )
+                if not has_track_number:
+                    msg = f"⚠ {rel_path}: Missing track number tag (album playback may sort unpredictably)"
+                    display_issues.append(msg)
+                    csv_issues.append({
+                        'file_path': str(rel_path),
+                        'issue_type': 'Track Number',
+                        'severity': 'Warning',
+                        'description': 'Missing track number tag',
                     })
 
         except Exception as e:

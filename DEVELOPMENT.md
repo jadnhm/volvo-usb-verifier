@@ -22,7 +22,7 @@ The project consists of two main toolsets:
 
 ### Volvo USB Media Preparation Pipeline
 
-Three Python scripts that work together in a pipeline:
+The main toolchain now includes dedicated cleanup, verification, rename, conversion, metadata-fix, folder-splitting, and coordination scripts:
 
 ### 1. `volvo_usb_verifier.py` - Detection Script
 
@@ -45,6 +45,7 @@ Three Python scripts that work together in a pipeline:
 - **Sample Rate**: 32/44.1/48 kHz for MP3, 8-96 kHz for AAC
 - **ID3 Tags**: Version detection (2.3 preferred, 2.4 problematic)
 - **Album Art**: Size estimation (>750KB can cause issues)
+- **Track Numbers**: Missing MP3 `TRCK` / M4A `trkn` tags that can cause album tracks to sort badly in-car
 
 **CSV Output Format**:
 ```csv
@@ -94,7 +95,8 @@ python volvo_usb_verifier.py D:/
 1. **No ID3 tags** → Adds basic ID3v2.3 tags (title from filename)
 2. **ID3v2.4 tags** → Converts to ID3v2.3 with ISO-8859-1 encoding
 3. **Unusual ID3 versions** (2.2, etc.) → Converts to ID3v2.3
-4. **Large album artwork** → Removes oversized embedded images
+4. **Large MP3 album artwork** → Removes oversized embedded images
+5. **Large M4A album artwork** → Removes oversized `covr` artwork from AAC/M4A files
 
 **Important**: Saves files with BOTH ID3v1 and ID3v2.3 tags per Volvo specs: "Including both ID3v1 and ID3v2.3 tags provides the best fallback behavior"
 
@@ -102,6 +104,7 @@ python volvo_usb_verifier.py D:/
 - Encoding issues (VBR → CBR requires re-encoding, lossy operation)
 - Sample rate issues (requires re-encoding)
 - Bitrate issues (requires re-encoding)
+- Missing track numbers (currently verifier-only; useful as a warning for album ordering)
 - Path/filename issues (handled by separate script)
 
 **Input**: CSV file from `volvo_usb_verifier.py`
@@ -209,6 +212,9 @@ timestamp,source_csv,original_path,new_path,status,actions,warnings,error
 - The verifier CSV should be treated as an immutable scan snapshot. Rename operations should be recorded in a separate manifest instead of rewriting the original CSV.
 - `volvo_usb_fixer.py` now warns when it detects a newer path manifest than the verifier CSV being used.
 - `volvo_pipeline.py` coordinates the preferred workflow end-to-end and automatically feeds the fresh verifier CSV into the ID3 fixer.
+- `volvo_usb_cleaner.py` removes common junk files safely before verification.
+- `volvo_converter.py` now supports `--resume` so interrupted conversion runs can continue without reprocessing already-converted files.
+- `volvo_folder_splitter.py` fixes the 254-files-per-folder limit by moving tracks into numbered subfolders; after using it, the pipeline should be restarted from the beginning.
 
 ---
 

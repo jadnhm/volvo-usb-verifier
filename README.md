@@ -8,9 +8,13 @@ This project consists of two main toolsets:
 
 ### Volvo USB Media Preparation Tools
 
-1. **`volvo_usb_verifier.py`** - Scans your USB drive and identifies all compatibility issues
-2. **`volvo_usb_fixer.py`** - Automatically fixes ID3 tag issues (lossless)
+1. **`volvo_usb_cleaner.py`** - Removes junk system/metadata files like `.DS_Store`, `Thumbs.db`, `__MACOSX/`, and `System Volume Information/`
+2. **`volvo_usb_verifier.py`** - Scans your USB drive and identifies all compatibility issues
 3. **`volvo_path_fixer.py`** - Automatically fixes filename and character issues
+4. **`volvo_converter.py`** - Converts lossless audio (FLAC/WAV/AIFF/APE/ALAC) to AAC M4A
+5. **`volvo_usb_fixer.py`** - Automatically fixes ID3/metadata issues losslessly
+6. **`volvo_folder_splitter.py`** - Splits folders that exceed the 254-file Volvo limit
+7. **`volvo_pipeline.py`** - Coordinates the end-to-end workflow
 
 ### Audiobook File Renaming Tools
 
@@ -35,7 +39,12 @@ See `AUDIOBOOK_RENAMING.md` for detailed documentation on the audiobook renaming
    pip install mutagen
    ```
 
-3. **Claude CLI** (optional - only for audiobook renaming tools)
+3. **Pytest** (optional, for running the test suite)
+   ```bash
+   pip install pytest
+   ```
+
+4. **Claude CLI** (optional - only for audiobook renaming tools)
    - Required for `rename_audiobooks.py`
    - Installation: https://github.com/anthropics/claude-code
    - Requires Claude API access
@@ -56,6 +65,7 @@ See `AUDIOBOOK_RENAMING.md` for detailed documentation on the audiobook renaming
 - **Sample Rate**: 32/44.1/48 kHz for MP3, 8-96 kHz for AAC
 - **ID3 Tags**: Version detection (ID3v2.3 preferred, ID3v2.4 problematic)
 - **Album Art**: Size estimation (>750KB can cause issues)
+- **Track Numbers**: Missing `TRCK` / `trkn` tags that can cause albums to play out of order
 
 **Usage**:
 ```bash
@@ -89,7 +99,8 @@ music\song.mp3,ID3 Tags,WARNING,ID3v2.4 (ID3v2.3 recommended)
 1. **No ID3 tags** → Adds basic ID3v2.3 tags (title from filename)
 2. **ID3v2.4 tags** → Converts to ID3v2.3 with ISO-8859-1 encoding
 3. **Unusual ID3 versions** (2.2, etc.) → Converts to ID3v2.3
-4. **Large album artwork** → Removes oversized embedded images (>750KB)
+4. **Large MP3 album artwork** → Removes oversized embedded images (>750KB)
+5. **Large M4A album artwork** → Removes oversized `covr` artwork from converted AAC/M4A files
 
 **Important**: Saves files with BOTH ID3v1 and ID3v2.3 tags per Volvo specs for best compatibility.
 
@@ -97,6 +108,7 @@ music\song.mp3,ID3 Tags,WARNING,ID3v2.4 (ID3v2.3 recommended)
 - VBR → CBR conversion (requires re-encoding, lossy)
 - Sample rate issues (requires re-encoding)
 - Bitrate issues (requires re-encoding)
+- Missing track numbers (currently reported by the verifier only)
 - Path/filename issues (use `volvo_path_fixer.py`)
 
 **Input**: CSV file from `volvo_usb_verifier.py`
@@ -196,6 +208,96 @@ File with issues (cannot fix):
 
 ---
 
+### 4. volvo_usb_cleaner.py - Junk File Cleaner
+
+**Purpose**: Remove macOS and Windows junk/metadata files that waste space and can clutter a media USB drive.
+
+**What It Removes**:
+- `.DS_Store`, `._*`, `__MACOSX/`
+- `Thumbs.db`, `desktop.ini`, `autorun.inf`
+- `.Spotlight-V100/`, `.fseventsd/`, `.Trashes/`, `.TemporaryItems/`
+- `$RECYCLE.BIN/`, `.recycler/`, `System Volume Information/`, `FOUND.000/`
+
+**Usage**:
+```bash
+# Dry run
+python volvo_usb_cleaner.py D:/
+
+# Apply deletions
+python volvo_usb_cleaner.py D:/ --apply
+```
+
+---
+
+### 5. volvo_converter.py - Lossless Audio Converter
+
+**Purpose**: Convert lossless and uncompressed audio to AAC 192kbps M4A using `ffmpeg`.
+
+**What It Converts**:
+- FLAC, WAV, AIFF/AIF, APE, ALAC
+- ALAC audio stored in `.m4a` / `.m4b` containers
+
+**Key Behavior**:
+- Dry-run by default
+- Writes `logs/volvo_convert_manifest_YYYYMMDD_HHMMSS.csv`
+- `--resume` skips files whose expected `.m4a` output already exists from a previous interrupted run
+- `--keep-originals` preserves the source lossless file after successful conversion
+
+**Usage**:
+```bash
+# Dry run
+python volvo_converter.py D:/
+
+# Convert and delete originals after success
+python volvo_converter.py D:/ --apply
+
+# Resume an interrupted conversion job
+python volvo_converter.py D:/ --apply --resume
+```
+
+---
+
+### 6. volvo_folder_splitter.py - Folder Count Splitter
+
+**Purpose**: Split folders containing more than 254 audio files into numbered subfolders.
+
+**Why It Exists**:
+- The Volvo stereo limit is 254 files per folder.
+- The verifier can detect this, and the splitter can now fix it automatically.
+
+**Key Behavior**:
+- Dry-run by default
+- Groups files into numbered alphabetical subfolders
+- Default target is 200 files per subfolder, leaving headroom below the hard limit
+- Writes `logs/volvo_split_manifest_YYYYMMDD_HHMMSS.csv`
+
+**Usage**:
+```bash
+# Dry run
+python volvo_folder_splitter.py D:/
+
+# Apply splits
+python volvo_folder_splitter.py D:/ --apply
+```
+
+---
+
+### 7. volvo_pipeline.py - End-to-End Coordinator
+
+**Purpose**: Run the preferred workflow from cleanup through final verification.
+
+**Workflow**:
+`clean -> verify -> path fix -> verify -> convert -> verify -> ID3 fix -> verify`
+
+**Flags**:
+- `--apply-clean`
+- `--apply-path`
+- `--apply-convert`
+- `--keep-originals-convert`
+- `--apply-id3`
+
+---
+
 ## Complete Workflow
 
 **Pipeline Helper**:
@@ -203,11 +305,13 @@ File with issues (cannot fix):
 # Dry-run the full workflow
 python volvo_pipeline.py D:/
 
-# Apply path fixes and ID3 fixes in one coordinated run
-python volvo_pipeline.py D:/ --apply-path --apply-id3
+# Apply cleanup, path fixes, conversion, and ID3 fixes in one coordinated run
+python volvo_pipeline.py D:/ --apply-clean --apply-path --apply-convert --apply-id3
 ```
 
-This helper runs `verify -> path fix -> verify -> ID3 fix -> verify` and automatically uses the fresh verifier CSV after path changes.
+This helper runs `clean -> verify -> path fix -> verify -> convert -> verify -> ID3 fix -> verify` and automatically uses the fresh verifier CSV after path changes and conversion.
+
+If you need to fix a folder-count violation, run `volvo_folder_splitter.py` first, then restart the pipeline from the beginning so all later CSV/log artifacts reflect the new folder structure.
 
 ### Step 1: Format Your USB Drive
 

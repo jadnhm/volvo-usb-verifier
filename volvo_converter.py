@@ -162,10 +162,12 @@ class VolvoConverter:
 
     def __init__(self, drive_path: str, dry_run: bool = True,
                  keep_originals: bool = False,
+                 resume: bool = False,
                  manifest_file: Optional[str] = None):
         self.drive_path = Path(drive_path)
         self.dry_run = dry_run
         self.keep_originals = keep_originals
+        self.resume = resume
         self.manifest_file = Path(manifest_file) if manifest_file else None
         self.logger = logging.getLogger('VolvoConverter')
         self.stats: Dict[str, int] = defaultdict(int)
@@ -204,13 +206,26 @@ class VolvoConverter:
             self.log(f"  {ext.upper()}: {count}")
 
         self.log(f"\nTarget: AAC {TARGET_BITRATE}, {TARGET_SAMPLE_RATE} Hz, .m4a container")
+
+        if self.resume:
+            self.log("\nResume mode: files with an existing .m4a output will be skipped.")
+
         self.log(f"Processing {len(lossless_files)} files...\n")
 
         total = len(lossless_files)
         for idx, input_path in enumerate(lossless_files, 1):
             rel_input = input_path.relative_to(self.drive_path)
+            preferred_output = input_path.with_suffix(TARGET_EXTENSION)
             output_path = safe_output_path(input_path)
             rel_output = output_path.relative_to(self.drive_path)
+
+            # Resume: skip if output already exists (from a previous interrupted run)
+            if self.resume and preferred_output.exists() and preferred_output != input_path:
+                self.log(f"  [{idx}/{total}] Skipping (already converted): {rel_input}")
+                self.stats['skipped_resume'] += 1
+                self._record(str(rel_input), str(preferred_output.relative_to(self.drive_path)), 'skipped_already_converted',
+                             'Output .m4a already exists')
+                continue
 
             if self.dry_run:
                 self.log(f"✓ [{idx}/{total}] Would convert: {rel_input}")
@@ -286,6 +301,8 @@ class VolvoConverter:
             self.log(f"  Files that would be converted: {self.stats['would_convert']}")
         else:
             self.log(f"  Files converted: {self.stats['converted']}")
+            if self.stats.get('skipped_resume'):
+                self.log(f"  Files skipped (resume): {self.stats['skipped_resume']}")
             if self.stats['failed']:
                 self.log(f"  Files failed:    {self.stats['failed']}")
 
@@ -356,6 +373,9 @@ WARNING: Always backup your files before running with --apply!
     parser.add_argument('--keep-originals', action='store_true',
                         help='Keep original files after successful conversion '
                              '(default: delete originals)')
+    parser.add_argument('--resume', action='store_true',
+                        help='Skip files whose .m4a output already exists '
+                             '(useful after an interrupted run)')
     args = parser.parse_args()
 
     if not os.path.exists(args.drive_path):
@@ -374,6 +394,7 @@ WARNING: Always backup your files before running with --apply!
         args.drive_path,
         dry_run=dry_run,
         keep_originals=args.keep_originals,
+        resume=args.resume,
         manifest_file=manifest_file,
     )
     converter.convert_all(ffmpeg_path)

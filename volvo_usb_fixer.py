@@ -38,6 +38,7 @@ try:
     from mutagen.mp3 import MP3
     from mutagen.id3 import ID3, ID3NoHeaderError, TIT2, TPE1, TALB, TDRC, APIC
     from mutagen.id3 import Encoding
+    from mutagen.mp4 import MP4
 except ImportError:
     print("ERROR: This script requires the 'mutagen' library.")
     print("Install it with: pip install mutagen")
@@ -174,9 +175,11 @@ class VolvoUSBFixer:
                 self.failed_files.append((file_path, "File not found"))
             return (file_path, ["File not found"], False)
 
-        # Only process MP3 files for now
-        if full_path.suffix.lower() == '.mp3':
+        ext = full_path.suffix.lower()
+        if ext == '.mp3':
             return self.fix_mp3_file(full_path, file_path, issues)
+        if ext in {'.m4a', '.m4b'}:
+            return self.fix_m4a_file(full_path, file_path, issues)
 
         return None
 
@@ -289,6 +292,53 @@ class VolvoUSBFixer:
             with self.failed_files_lock:
                 self.failed_files.append((rel_path, f"Unexpected error: {e}"))
             return (rel_path, [f"Unexpected error: {e}"], False)
+
+    def fix_m4a_file(self, full_path: Path, rel_path: str, issues: List[Dict]):
+        """Fix issues in an M4A/M4B file. Currently handles oversized album art."""
+        art_issues = [i for i in issues if i['issue_type'] == 'Album Art']
+        if not art_issues:
+            return (rel_path, [], True)
+
+        try:
+            audio = MP4(full_path)
+        except Exception as e:
+            with self.failed_files_lock:
+                self.failed_files.append((rel_path, f"Failed to load M4A: {e}"))
+            return (rel_path, [f"Failed to load M4A: {e}"], False)
+
+        fixes_applied = []
+        modified = False
+
+        if self.dry_run:
+            fixes_applied.append("Would remove large album artwork")
+        else:
+            if audio.tags and 'covr' in audio.tags:
+                del audio.tags['covr']
+                modified = True
+                fixes_applied.append("Removed large album artwork")
+
+        with self.stats_lock:
+            self.stats['removed_artwork'] += 1
+
+        if modified:
+            try:
+                audio.save()
+                with self.fixed_files_lock:
+                    self.fixed_files.append((rel_path, fixes_applied))
+                with self.stats_lock:
+                    self.stats['files_modified'] += 1
+                return (rel_path, fixes_applied, True)
+            except Exception as e:
+                with self.failed_files_lock:
+                    self.failed_files.append((rel_path, f"Failed to save: {e}"))
+                return (rel_path, fixes_applied + [f"Failed to save: {e}"], False)
+
+        if fixes_applied:
+            with self.fixed_files_lock:
+                self.fixed_files.append((rel_path, fixes_applied))
+            return (rel_path, fixes_applied, True)
+
+        return (rel_path, [], True)
 
     def print_summary(self):
         """Print summary of fixes applied."""
