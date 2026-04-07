@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from volvo_usb_fixer import VolvoUSBFixer
+from lib.volvo_usb_fixer import VolvoUSBFixer
 
 
 def _make_fixer(csv_path: str, drive_path: str) -> VolvoUSBFixer:

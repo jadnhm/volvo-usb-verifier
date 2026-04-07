@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from volvo_folder_splitter import VolvoFolderSplitter, MAX_FILES_PER_FOLDER
+from lib.volvo_folder_splitter import VolvoFolderSplitter, MAX_FILES_PER_FOLDER
 
 
 def _make_audio_files(folder: Path, count: int, ext: str = '.mp3'):

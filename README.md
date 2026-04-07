@@ -8,20 +8,20 @@ This project consists of two main toolsets:
 
 ### Volvo USB Media Preparation Tools
 
-1. **`volvo_usb_cleaner.py`** - Removes junk system/metadata files like `.DS_Store`, `Thumbs.db`, `__MACOSX/`, and `System Volume Information/`
-2. **`volvo_usb_verifier.py`** - Scans your USB drive and identifies all compatibility issues
-3. **`volvo_path_fixer.py`** - Automatically fixes filename and character issues
-4. **`volvo_converter.py`** - Converts lossless audio (FLAC/WAV/AIFF/APE/ALAC) to AAC M4A
-5. **`volvo_usb_fixer.py`** - Automatically fixes ID3/metadata issues losslessly
-6. **`volvo_folder_splitter.py`** - Splits folders that exceed the 254-file Volvo limit
-7. **`volvo_pipeline.py`** - Coordinates the end-to-end workflow
+1. **`volvo_pipeline.py`** - Primary entry point that coordinates the end-to-end workflow
+2. **`lib/volvo_usb_cleaner.py`** - Removes junk system/metadata files like `.DS_Store`, `Thumbs.db`, `__MACOSX/`, and `System Volume Information/`
+3. **`lib/volvo_usb_verifier.py`** - Scans your USB drive and identifies all compatibility issues
+4. **`lib/volvo_path_fixer.py`** - Automatically fixes filename and character issues
+5. **`lib/volvo_converter.py`** - Converts lossless audio (FLAC/WAV/AIFF/APE/ALAC) to AAC M4A
+6. **`lib/volvo_usb_fixer.py`** - Automatically fixes ID3/metadata issues losslessly
+7. **`lib/volvo_folder_splitter.py`** - Splits folders that exceed the 254-file Volvo limit
 
 ### Audiobook File Renaming Tools
 
-1. **`rename_audiobooks_batch.py`** - **RECOMMENDED** - Batch renaming (93% fewer API calls)
-2. **`rename_audiobooks.py`** - Per-file renaming (simple but more expensive)
-3. **`test_path_shortening.py`** - Test suite for path shortening prompts
-4. **`sample_rename_preview.py`** - Quick preview tool for sampling directories
+1. **`lib/audiobooks/rename_audiobooks_batch.py`** - **RECOMMENDED** - Batch renaming (93% fewer API calls)
+2. **`lib/audiobooks/rename_audiobooks.py`** - Per-file renaming (simple but more expensive)
+3. **`lib/audiobooks/test_path_shortening.py`** - Test suite for path shortening prompts
+4. **`lib/audiobooks/sample_rename_preview.py`** - Quick preview tool for sampling directories
 
 See `AUDIOBOOK_RENAMING.md` for detailed documentation on the audiobook renaming toolset.
 
@@ -49,9 +49,66 @@ See `AUDIOBOOK_RENAMING.md` for detailed documentation on the audiobook renaming
    - Installation: https://github.com/anthropics/claude-code
    - Requires Claude API access
 
+## Developer Setup
+
+The intended entry point for Volvo work is the top-level `volvo_pipeline.py` script. All other operational scripts now live under `lib/` as helper tools.
+
+### Recommended Python Version
+
+- Python 3.11+ recommended
+- Python 3.14 works in this repo and is currently in use, but some editor tooling may lag behind very new Python releases
+
+### Create a Virtual Environment
+
+Windows PowerShell:
+
+```bash
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+macOS / Linux:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### Run the Main Program
+
+Dry run:
+
+```bash
+python volvo_pipeline.py D:/
+```
+
+Apply cleanup, renames, conversion, and ID3 fixes:
+
+```bash
+python volvo_pipeline.py D:/ --apply-clean --apply-path --apply-convert --apply-id3
+```
+
+### Run Tests
+
+```bash
+pytest tests/ -q
+```
+
+### Project Layout
+
+- `volvo_pipeline.py`: main entry point
+- `lib/`: helper scripts used by the pipeline and tests
+- `lib/audiobooks/`: audiobook-specific helper scripts
+- `tests/`: pytest suite
+- `logs/`: generated verifier, fixer, converter, cleaner, and splitter outputs
+
 ## The Scripts
 
-### 1. volvo_usb_verifier.py - Detection & Analysis
+### 1. lib/volvo_usb_verifier.py - Detection & Analysis
 
 **Purpose**: Scan your USB drive and identify all compatibility issues.
 
@@ -70,10 +127,10 @@ See `AUDIOBOOK_RENAMING.md` for detailed documentation on the audiobook renaming
 **Usage**:
 ```bash
 # Windows
-python volvo_usb_verifier.py D:/
+python lib/volvo_usb_verifier.py D:/
 
 # Linux/macOS
-python volvo_usb_verifier.py /path/to/usb
+python lib/volvo_usb_verifier.py /path/to/usb
 ```
 
 **Output Files**:
@@ -91,7 +148,7 @@ music\song.mp3,ID3 Tags,WARNING,ID3v2.4 (ID3v2.3 recommended)
 
 ---
 
-### 2. volvo_usb_fixer.py - ID3 Tag Fixer
+### 2. lib/volvo_usb_fixer.py - ID3 Tag Fixer
 
 **Purpose**: Automatically fix ID3 tag issues without re-encoding audio (lossless operation).
 
@@ -120,10 +177,10 @@ music\song.mp3,ID3 Tags,WARNING,ID3v2.4 (ID3v2.3 recommended)
 **Usage**:
 ```bash
 # Dry run (preview changes)
-python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
+python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
 
 # Apply changes
-python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
+python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
 ```
 
 **Output Example**:
@@ -138,7 +195,7 @@ python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --appl
 
 ---
 
-### 3. volvo_path_fixer.py - Filename & Character Fixer
+### 3. lib/volvo_path_fixer.py - Filename & Character Fixer
 
 **Purpose**: Automatically fix filename length and invalid character issues. Reports on path length issues that require manual intervention.
 
@@ -186,10 +243,10 @@ python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --appl
 **Usage**:
 ```bash
 # Dry run (preview changes)
-python volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
+python lib/volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
 
 # Apply changes
-python volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
+python lib/volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
 ```
 
 **Output Example**:
@@ -208,7 +265,7 @@ File with issues (cannot fix):
 
 ---
 
-### 4. volvo_usb_cleaner.py - Junk File Cleaner
+### 4. lib/volvo_usb_cleaner.py - Junk File Cleaner
 
 **Purpose**: Remove macOS and Windows junk/metadata files that waste space and can clutter a media USB drive.
 
@@ -221,15 +278,15 @@ File with issues (cannot fix):
 **Usage**:
 ```bash
 # Dry run
-python volvo_usb_cleaner.py D:/
+python lib/volvo_usb_cleaner.py D:/
 
 # Apply deletions
-python volvo_usb_cleaner.py D:/ --apply
+python lib/volvo_usb_cleaner.py D:/ --apply
 ```
 
 ---
 
-### 5. volvo_converter.py - Lossless Audio Converter
+### 5. lib/volvo_converter.py - Lossless Audio Converter
 
 **Purpose**: Convert lossless and uncompressed audio to AAC 192kbps M4A using `ffmpeg`.
 
@@ -246,18 +303,18 @@ python volvo_usb_cleaner.py D:/ --apply
 **Usage**:
 ```bash
 # Dry run
-python volvo_converter.py D:/
+python lib/volvo_converter.py D:/
 
 # Convert and delete originals after success
-python volvo_converter.py D:/ --apply
+python lib/volvo_converter.py D:/ --apply
 
 # Resume an interrupted conversion job
-python volvo_converter.py D:/ --apply --resume
+python lib/volvo_converter.py D:/ --apply --resume
 ```
 
 ---
 
-### 6. volvo_folder_splitter.py - Folder Count Splitter
+### 6. lib/volvo_folder_splitter.py - Folder Count Splitter
 
 **Purpose**: Split folders containing more than 254 audio files into numbered subfolders.
 
@@ -274,10 +331,10 @@ python volvo_converter.py D:/ --apply --resume
 **Usage**:
 ```bash
 # Dry run
-python volvo_folder_splitter.py D:/
+python lib/volvo_folder_splitter.py D:/
 
 # Apply splits
-python volvo_folder_splitter.py D:/ --apply
+python lib/volvo_folder_splitter.py D:/ --apply
 ```
 
 ---
@@ -311,7 +368,7 @@ python volvo_pipeline.py D:/ --apply-clean --apply-path --apply-convert --apply-
 
 This helper runs `clean -> verify -> path fix -> verify -> convert -> verify -> ID3 fix -> verify` and automatically uses the fresh verifier CSV after path changes and conversion.
 
-If you need to fix a folder-count violation, run `volvo_folder_splitter.py` first, then restart the pipeline from the beginning so all later CSV/log artifacts reflect the new folder structure.
+If you need to fix a folder-count violation, run `python lib/volvo_folder_splitter.py ...` first, then restart the pipeline from the beginning so all later CSV/log artifacts reflect the new folder structure.
 
 ### Step 1: Format Your USB Drive
 
@@ -357,10 +414,10 @@ D:\
 **Basic Usage** (console output only):
 ```bash
 # Windows
-python volvo_usb_verifier.py D:/
+python lib/volvo_usb_verifier.py D:/
 
 # Linux/macOS
-python volvo_usb_verifier.py /path/to/usb
+python lib/volvo_usb_verifier.py /path/to/usb
 ```
 
 **Output Files Generated**:
@@ -379,22 +436,22 @@ Review the log files to understand all issues found.
 **Basic Usage**:
 ```bash
 # Dry run first
-python volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
+python lib/volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
 
 # Review output, then apply if acceptable
-python volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
+python lib/volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
 ```
 
 **Save Console Output**:
 
 Windows (PowerShell):
 ```powershell
-python volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ | Tee-Object -FilePath "path_fixer_output.txt"
+python lib/volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ | Tee-Object -FilePath "path_fixer_output.txt"
 ```
 
 Linux/macOS:
 ```bash
-python volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv /path/to/usb 2>&1 | tee path_fixer_output.txt
+python lib/volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv /path/to/usb 2>&1 | tee path_fixer_output.txt
 ```
 
 **What It Does**:
@@ -409,7 +466,7 @@ Reports (but doesn't fix):
 ### Step 5: Re-verify After Applied Renames
 
 ```bash
-python volvo_usb_verifier.py D:/
+python lib/volvo_usb_verifier.py D:/
 ```
 
 Use the fresh CSV from this second scan when running the ID3 fixer.
@@ -419,22 +476,22 @@ Use the fresh CSV from this second scan when running the ID3 fixer.
 **Basic Usage**:
 ```bash
 # Dry run first
-python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
+python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
 
 # Review output, then apply if acceptable
-python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
+python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
 ```
 
 **Save Console Output**:
 
 Windows (PowerShell):
 ```powershell
-python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ | Tee-Object -FilePath "id3_fixer_output.txt"
+python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ | Tee-Object -FilePath "id3_fixer_output.txt"
 ```
 
 Linux/macOS:
 ```bash
-python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv /path/to/usb 2>&1 | tee id3_fixer_output.txt
+python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv /path/to/usb 2>&1 | tee id3_fixer_output.txt
 ```
 
 **What It Does**:
@@ -448,7 +505,7 @@ Fixes:
 ### Step 7: Re-verify
 
 ```bash
-python volvo_usb_verifier.py D:/
+python lib/volvo_usb_verifier.py D:/
 ```
 
 Check the new report to see remaining issues that require manual intervention:
@@ -619,13 +676,13 @@ For audiobooks with extremely long paths, use the AI-powered batch renaming tool
 
 ```bash
 # Preview changes (dry run) - RECOMMENDED
-python rename_audiobooks_batch.py
+python lib/audiobooks/rename_audiobooks_batch.py
 
 # Preview first 100 files
-python rename_audiobooks_batch.py --limit 100
+python lib/audiobooks/rename_audiobooks_batch.py --limit 100
 
 # Apply changes after review
-python rename_audiobooks_batch.py --apply
+python lib/audiobooks/rename_audiobooks_batch.py --apply
 ```
 
 The batch script is **93% more efficient** - it makes one API call per book instead of per file (e.g., 7 calls for 100 files instead of 100 calls).

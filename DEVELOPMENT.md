@@ -24,7 +24,7 @@ The project consists of two main toolsets:
 
 The main toolchain now includes dedicated cleanup, verification, rename, conversion, metadata-fix, folder-splitting, and coordination scripts:
 
-### 1. `volvo_usb_verifier.py` - Detection Script
+### 1. `lib/volvo_usb_verifier.py` - Detection Script
 
 **Purpose**: Scan a USB drive and identify all compatibility issues.
 
@@ -67,7 +67,7 @@ music\Artist\Song.mp3,ID3 Tags,WARNING,ID3v2.4 (ID3v2.3 recommended)
 
 **Usage**:
 ```bash
-python volvo_usb_verifier.py D:/
+python lib/volvo_usb_verifier.py D:/
 ```
 
 **Output Files**:
@@ -80,7 +80,7 @@ python volvo_usb_verifier.py D:/
 
 ---
 
-### 2. `volvo_usb_fixer.py` - ID3 Tag Fixer
+### 2. `lib/volvo_usb_fixer.py` - ID3 Tag Fixer
 
 **Purpose**: Automatically fix ID3 tag issues without re-encoding audio.
 
@@ -107,17 +107,17 @@ python volvo_usb_verifier.py D:/
 - Missing track numbers (currently verifier-only; useful as a warning for album ordering)
 - Path/filename issues (handled by separate script)
 
-**Input**: CSV file from `volvo_usb_verifier.py`
+**Input**: CSV file from `lib/volvo_usb_verifier.py`
 
-**Workflow Note**: This script resolves files by the exact `file_path` values stored in the verifier CSV. If `volvo_path_fixer.py` has renamed files since that CSV was generated, this script can report "File not found" for the old paths. Re-run the verifier after any applied renames and use the fresh CSV here.
+**Workflow Note**: This script resolves files by the exact `file_path` values stored in the verifier CSV. If `lib/volvo_path_fixer.py` has renamed files since that CSV was generated, this script can report "File not found" for the old paths. Re-run the verifier after any applied renames and use the fresh CSV here.
 
 **Usage**:
 ```bash
 # Dry run (preview changes)
-python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
+python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
 
 # Apply changes
-python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
+python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
 ```
 
 **Output Example**:
@@ -132,7 +132,7 @@ python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --appl
 
 ---
 
-### 3. `volvo_path_fixer.py` - Path/Filename Fixer
+### 3. `lib/volvo_path_fixer.py` - Path/Filename Fixer
 
 **Purpose**: Automatically fix filename length and invalid character issues by renaming files. It also reports path length issues that still require manual intervention.
 
@@ -169,20 +169,20 @@ python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --appl
 'Anniversary' → 'Anniv'
 ```
 
-**Input**: CSV file from `volvo_usb_verifier.py`
+**Input**: CSV file from `lib/volvo_usb_verifier.py`
 
 **Important Behavior**:
 - This script uses the verifier CSV as input.
 - When run with `--apply`, it can rename files so the original verifier CSV becomes stale for later steps.
-- After applied renames, run `volvo_usb_verifier.py` again before using `volvo_usb_fixer.py`.
+- After applied renames, run `lib/volvo_usb_verifier.py` again before using `lib/volvo_usb_fixer.py`.
 
 **Usage**:
 ```bash
 # Dry run (preview changes)
-python volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
+python lib/volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
 
 # Apply changes
-python volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
+python lib/volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
 ```
 
 **Output Example**:
@@ -205,16 +205,16 @@ timestamp,source_csv,original_path,new_path,status,actions,warnings,error
 
 ### Workflow Findings (April 2026)
 
-- `volvo_path_fixer.py` and `volvo_usb_fixer.py` both consume the verifier CSV as input.
+- `lib/volvo_path_fixer.py` and `lib/volvo_usb_fixer.py` both consume the verifier CSV as input.
 - Running the ID3 fixer before the path fixer is safe because it edits files in place and does not change their paths.
 - Running the path fixer with `--apply` before the ID3 fixer can make the original verifier CSV stale.
 - The correct pipeline after renames is: verify -> path fixer -> re-verify -> ID3 fixer.
 - The verifier CSV should be treated as an immutable scan snapshot. Rename operations should be recorded in a separate manifest instead of rewriting the original CSV.
-- `volvo_usb_fixer.py` now warns when it detects a newer path manifest than the verifier CSV being used.
+- `lib/volvo_usb_fixer.py` now warns when it detects a newer path manifest than the verifier CSV being used.
 - `volvo_pipeline.py` coordinates the preferred workflow end-to-end and automatically feeds the fresh verifier CSV into the ID3 fixer.
-- `volvo_usb_cleaner.py` removes common junk files safely before verification.
-- `volvo_converter.py` now supports `--resume` so interrupted conversion runs can continue without reprocessing already-converted files.
-- `volvo_folder_splitter.py` fixes the 254-files-per-folder limit by moving tracks into numbered subfolders; after using it, the pipeline should be restarted from the beginning.
+- `lib/volvo_usb_cleaner.py` removes common junk files safely before verification.
+- `lib/volvo_converter.py` now supports `--resume` so interrupted conversion runs can continue without reprocessing already-converted files.
+- `lib/volvo_folder_splitter.py` fixes the 254-files-per-folder limit by moving tracks into numbered subfolders; after using it, the pipeline should be restarted from the beginning.
 
 ---
 

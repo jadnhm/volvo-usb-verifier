@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from volvo_converter import (
+from lib.volvo_converter import (
     safe_output_path,
     find_lossless_files,
     is_alac,
@@ -108,7 +108,7 @@ class TestFindLosslessFiles(unittest.TestCase):
 class TestIsAlac(unittest.TestCase):
 
     def test_returns_false_when_mutagen_unavailable(self):
-        with patch('volvo_converter._MUTAGEN_AVAILABLE', False):
+        with patch('lib.volvo_converter._MUTAGEN_AVAILABLE', False):
             self.assertFalse(is_alac(Path('fake.m4a')))
 
     def test_returns_false_on_non_m4a_bytes(self):
@@ -135,7 +135,7 @@ class TestResumeSkip(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_resume_skips_already_converted(self):
-        from volvo_converter import VolvoConverter, setup_logging
+        from lib.volvo_converter import VolvoConverter, setup_logging
         import logging
 
         flac = self.base / 'song.flac'

@@ -10,7 +10,13 @@ dist/
 downloads/
 eggs/
 .eggs/
+# This repo intentionally tracks its own helper scripts under /lib.
+# Keep the Python template ignore list, but explicitly unignore the repo lib/.
 lib/
+!lib/
+!lib/**
+lib/**/__pycache__/
+lib/**/*.py[cod]
 lib64/
 parts/
 sdist/

@@ -41,7 +41,7 @@ def check_ffmpeg():
 
 def run_cleaner(python_cmd: str, script_dir: Path, drive_path: str, apply_changes: bool):
     """Run junk-file cleaner as an optional pre-step."""
-    command = [python_cmd, str(script_dir / 'volvo_usb_cleaner.py'), drive_path]
+    command = [python_cmd, str(script_dir / 'lib' / 'volvo_usb_cleaner.py'), drive_path]
     if apply_changes:
         command.append('--apply')
     run_step(command, 'Step 0: Clean junk files')
@@ -77,7 +77,7 @@ def run_verifier(python_cmd: str, script_dir: Path, drive_path: str, log_dir: Pa
     """Run verifier and return the newest CSV it produced."""
     before = max((path.stat().st_mtime for path in log_dir.glob('volvo_verify_*.csv')), default=0.0)
     run_step(
-        [python_cmd, str(script_dir / 'volvo_usb_verifier.py'), drive_path],
+        [python_cmd, str(script_dir / 'lib' / 'volvo_usb_verifier.py'), drive_path],
         label,
         allowed_exit_codes={0, 1},
     )
@@ -87,7 +87,7 @@ def run_verifier(python_cmd: str, script_dir: Path, drive_path: str, log_dir: Pa
 def run_path_fixer(python_cmd: str, script_dir: Path, csv_file: Path, drive_path: str,
                    apply_changes: bool, log_dir: Path) -> Path:
     """Run path fixer and return the newest manifest it produced."""
-    command = [python_cmd, str(script_dir / 'volvo_path_fixer.py'), str(csv_file), drive_path]
+    command = [python_cmd, str(script_dir / 'lib' / 'volvo_path_fixer.py'), str(csv_file), drive_path]
     if apply_changes:
         command.append('--apply')
 
@@ -99,7 +99,7 @@ def run_path_fixer(python_cmd: str, script_dir: Path, csv_file: Path, drive_path
 def run_converter(python_cmd: str, script_dir: Path, drive_path: str,
                   apply_changes: bool, keep_originals: bool, log_dir: Path) -> Path:
     """Run lossless converter and return the newest manifest it produced."""
-    command = [python_cmd, str(script_dir / 'volvo_converter.py'), drive_path]
+    command = [python_cmd, str(script_dir / 'lib' / 'volvo_converter.py'), drive_path]
     if apply_changes:
         command.append('--apply')
     if keep_originals:
@@ -113,7 +113,7 @@ def run_converter(python_cmd: str, script_dir: Path, drive_path: str,
 def run_id3_fixer(python_cmd: str, script_dir: Path, csv_file: Path, drive_path: str,
                   apply_changes: bool):
     """Run ID3 fixer against a verifier CSV."""
-    command = [python_cmd, str(script_dir / 'volvo_usb_fixer.py'), str(csv_file), drive_path]
+    command = [python_cmd, str(script_dir / 'lib' / 'volvo_usb_fixer.py'), str(csv_file), drive_path]
     if apply_changes:
         command.append('--apply')
 

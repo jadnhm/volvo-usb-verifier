@@ -10,25 +10,25 @@ Two independent toolsets live in this repo:
 
 ### 1. Volvo USB Preparation Pipeline (main toolset)
 
-Scripts that work in a coordinated pipeline — run via `volvo_pipeline.py` or individually:
+Scripts that work in a coordinated pipeline — run via top-level `volvo_pipeline.py`, with helpers living under `lib/`:
 
-1. **`volvo_usb_verifier.py`** — Scans a USB drive, outputs a timestamped `.log` + `.csv` to `logs/`
-2. **`volvo_path_fixer.py`** — Renames files/folders to fix filename length and invalid characters. Outputs a rename manifest. **Run before the converter and ID3 fixer** — renaming invalidates CSV paths.
-3. **`volvo_converter.py`** — Converts lossless/uncompressed files (FLAC, WAV, AIFF, APE, ALAC) to AAC 192kbps M4A. Requires `ffmpeg` on PATH. Outputs a conversion manifest.
-4. **`volvo_usb_fixer.py`** — Fixes ID3 tags losslessly (version, missing tags, oversized art). Takes the CSV from the verifier as input.
-5. **`volvo_pipeline.py`** — Coordinator: runs verify → path-fix → re-verify → convert → re-verify → ID3-fix → final verify in one command.
+1. **`lib/volvo_usb_verifier.py`** — Scans a USB drive, outputs a timestamped `.log` + `.csv` to `logs/`
+2. **`lib/volvo_path_fixer.py`** — Renames files/folders to fix filename length and invalid characters. Outputs a rename manifest. **Run before the converter and ID3 fixer** — renaming invalidates CSV paths.
+3. **`lib/volvo_converter.py`** — Converts lossless/uncompressed files (FLAC, WAV, AIFF, APE, ALAC) to AAC 192kbps M4A. Requires `ffmpeg` on PATH. Outputs a conversion manifest.
+4. **`lib/volvo_usb_fixer.py`** — Fixes ID3 tags losslessly (version, missing tags, oversized art). Takes the CSV from the verifier as input.
+5. **`volvo_pipeline.py`** — Coordinator: runs clean → verify → path-fix → re-verify → convert → re-verify → ID3-fix → final verify in one command.
 
 All scripts support dry-run mode by default; pass `--apply` to make changes.
-Pipeline flags: `--apply-path`, `--apply-convert`, `--keep-originals-convert`, `--apply-id3`.
+Pipeline flags: `--apply-clean`, `--apply-path`, `--apply-convert`, `--keep-originals-convert`, `--apply-id3`.
 
 ### 2. Audiobook Renaming Toolset (AI-assisted)
 
-- **`rename_audiobooks_batch.py`** — Preferred. Groups files by book, makes one Claude API call per book (93% fewer calls). Uses the `v7_refined` prompt.
-- **`rename_audiobooks.py`** — Per-file fallback for unusual edge cases.
-- **`test_path_shortening.py`** — Test suite validating prompt accuracy.
-- **`sample_rename_preview.py`** — Samples one file per directory for a quick preview.
+- **`lib/audiobooks/rename_audiobooks_batch.py`** — Preferred. Groups files by book, makes one Claude API call per book (93% fewer calls). Uses the `v7_refined` prompt.
+- **`lib/audiobooks/rename_audiobooks.py`** — Per-file fallback for unusual edge cases.
+- **`lib/audiobooks/test_path_shortening.py`** — Test suite validating prompt accuracy.
+- **`lib/audiobooks/sample_rename_preview.py`** — Samples one file per directory for a quick preview.
 
-The `VOLVO/` folder is a working/staging area; the tested scripts live at the repo root.
+The `VOLVO/` folder is a working/staging area. Operational helper scripts live under `lib/`, while `volvo_pipeline.py` remains the top-level entry point.
 
 ## Key Constraints (Volvo Stereo)
 
@@ -45,9 +45,9 @@ The `VOLVO/` folder is a working/staging area; the tested scripts live at the re
 
 | Issue | Auto-fixable? | Tool |
 |---|---|---|
-| ID3 tag version / missing tags | ✅ Lossless | `volvo_usb_fixer.py` |
-| Oversized album art | ✅ Lossless | `volvo_usb_fixer.py` |
-| Long filenames / invalid chars | ✅ Rename | `volvo_path_fixer.py` |
+| ID3 tag version / missing tags | ✅ Lossless | `lib/volvo_usb_fixer.py` |
+| Oversized album art | ✅ Lossless | `lib/volvo_usb_fixer.py` |
+| Long filenames / invalid chars | ✅ Rename | `lib/volvo_path_fixer.py` |
 | VBR → CBR | ❌ Requires re-encode | foobar2000 manually |
 | Sample rate / bitrate issues | ❌ Requires re-encode | foobar2000 manually |
 | Path length (folder depth) | ❌ Manual rename | — |
@@ -58,5 +58,6 @@ The `VOLVO/` folder is a working/staging area; the tested scripts live at the re
 
 ```bash
 pip install mutagen         # Required for all Volvo USB scripts
+pip install -r requirements.txt
 # Claude CLI required for audiobook renaming tools
 ```
