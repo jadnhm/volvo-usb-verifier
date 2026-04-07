@@ -32,7 +32,7 @@ env/
 ENV/
 
 # IDE
-# .vscode/
+.vscode/settings.json
 .idea/
 *.swp
 *.swo

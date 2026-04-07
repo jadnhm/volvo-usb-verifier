@@ -1,9 +1,0 @@
-{
-    "python.defaultInterpreterPath": "c:/python314/python.exe",
-    "chat.tools.terminal.autoApprove": {
-        "/^c:/python314/python\\.exe \\.\\\\volvo_pipeline\\.py \\.\\\\VOLVO\\\\music$/": {
-            "approve": true,
-            "matchCommandLine": true
-        }
-    }
-}
