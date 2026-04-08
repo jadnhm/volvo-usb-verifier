@@ -75,6 +75,12 @@ class VolvoPathFixer:
         'Unreleased': 'Unrel',
     }
 
+    ENCODING_TAG_PATTERNS = [
+        re.compile(r'\s*[\[(]\s*\d{2,4}\s*k?bps(?:\s+(?:CBR|VBR))?\s*[\])]', re.IGNORECASE),
+        re.compile(r'\s*[\[(]\s*(?:CBR|VBR)\s*[\])]', re.IGNORECASE),
+        re.compile(r'\s*@\s*\d{2,4}(?:\s*k?bps)?\b', re.IGNORECASE),
+    ]
+
     MAX_PATH_LENGTH = 60
     MAX_FILENAME_LENGTH = 64
 
@@ -356,6 +362,11 @@ class VolvoPathFixer:
         # Separate name and extension
         stem = Path(filename).stem
         ext = Path(filename).suffix
+
+        # Drop nonessential encoding/bitrate tags before abbreviation/truncation.
+        for pattern in self.ENCODING_TAG_PATTERNS:
+            stem = pattern.sub('', stem)
+        stem = re.sub(r'\s{2,}', ' ', stem).strip()
 
         # Apply word replacements
         for old, new in self.WORD_REPLACEMENTS.items():

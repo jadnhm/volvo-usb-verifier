@@ -123,6 +123,24 @@ class TestShortenFilename(unittest.TestCase):
         # Should be shorter after abbreviation
         self.assertLessEqual(len(result), VolvoPathFixer.MAX_FILENAME_LENGTH)
 
+    def test_bitrate_bracket_removed_when_shortening(self):
+        name = "The Best Of Instrumental Surf Rock Albums Compilation [320kbps CBR].nfo"
+        result = self.fixer._shorten_filename(name)
+        self.assertNotIn("320kbps", result)
+        self.assertNotIn("CBR", result)
+        self.assertLessEqual(len(result), VolvoPathFixer.MAX_FILENAME_LENGTH)
+
+    def test_at320_removed_when_shortening(self):
+        name = "01 - A Very Long Song Name That Needs Shortening Immediately @320.mp3"
+        result = self.fixer._shorten_filename(name)
+        self.assertNotIn("@320", result)
+        self.assertTrue(result.startswith("01"), f"Track number lost: {result}")
+        self.assertLessEqual(len(result), VolvoPathFixer.MAX_FILENAME_LENGTH)
+
+    def test_short_filename_not_changed_just_for_bitrate_tag(self):
+        name = "01 - Song [320kbps CBR].mp3"
+        self.assertEqual(self.fixer._shorten_filename(name), name)
+
     def test_the_prefix_removed_on_abbreviation(self):
         name = "The Very Long Song Title With Words That Exceed Sixty Four Characters Easily.mp3"
         result = self.fixer._shorten_filename(name)
