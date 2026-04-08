@@ -46,6 +46,8 @@ desktop.ini
 # Test files and temporary data
 test_drive/
 *.tmp
+.tmp/
+.hypothesis/
 volvo_verify_temp.txt
 
 # Log files

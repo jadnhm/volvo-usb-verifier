@@ -9,8 +9,10 @@ fixes filename issues to make files compatible with the 2012 Volvo XC70 stereo.
 Fixes applied:
 - Shorten filenames that exceed 64 characters
 - Replace extended ASCII characters with safe alternatives
+- Remove nonessential encoding metadata from parent folders for long paths
 
-Note: Path length issues must be handled manually or with a separate tool.
+Note: Some path length issues can be reduced automatically, but many still
+require manual folder renaming or reorganization.
 
 WARNING: This script renames files. Always backup your files first!
 """
@@ -207,6 +209,15 @@ class VolvoPathFixer:
             fixes_applied.append(f"Shortened filename to {len(new_filename)} chars")
             self.stats['filenames_shortened'] += 1
 
+        # For long paths, try removing nonessential encoding metadata from
+        # parent folders before giving up and reporting manual intervention.
+        if has_long_path:
+            shortened_path = self._shorten_parent_dirs(new_path)
+            if shortened_path != new_path:
+                new_path = shortened_path
+                fixes_applied.append("Removed encoding metadata from parent folders")
+                self.stats['parent_dirs_shortened'] += 1
+
         # Collision detection: if the computed target path already exists as a
         # *different* file, generate a safe unique name by appending _2, _3, etc.
         if str(new_path) != file_path:
@@ -393,6 +404,34 @@ class VolvoPathFixer:
 
         return stem + ext
 
+    def _strip_encoding_metadata(self, value: str) -> str:
+        """Remove nonessential encoding/bitrate markers from a path component."""
+        result = value
+        for pattern in self.ENCODING_TAG_PATTERNS:
+            result = pattern.sub('', result)
+        result = re.sub(r'\s{2,}', ' ', result)
+        result = re.sub(r'\s+([\]\)])', r'\1', result)
+        return result.strip()
+
+    def _shorten_parent_dirs(self, path_obj: Path) -> Path:
+        """Try to shorten parent folders by removing nonessential metadata."""
+        parent_parts = []
+        changed = False
+
+        for part in path_obj.parent.parts:
+            stripped = self._strip_encoding_metadata(part)
+            if stripped and stripped != part:
+                parent_parts.append(stripped)
+                changed = True
+            else:
+                parent_parts.append(part)
+
+        if not changed:
+            return path_obj
+
+        parent_path = Path(*parent_parts) if parent_parts else Path()
+        return parent_path / path_obj.name
+
     def print_summary(self):
         """Print summary of fixes applied."""
         self.log(f"\n{'='*70}")
@@ -486,8 +525,9 @@ Examples:
   # Apply changes
   python volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
 
-Note: This script only fixes filename length and invalid character issues.
-      Path length issues must be handled manually.
+Note: This script fixes filename length and invalid character issues, and can
+    also strip nonessential bitrate/encoding metadata from parent folders.
+    Many path length issues still require manual renaming.
 
 WARNING: Always backup your files before running with --apply!
         """

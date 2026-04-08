@@ -203,18 +203,20 @@ python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --
 
 ### 3. lib/volvo_path_fixer.py - Filename & Character Fixer
 
-**Purpose**: Automatically fix filename length and invalid character issues. Reports on path length issues that require manual intervention.
+**Purpose**: Automatically fix filename length, invalid character issues, and some path-length debt caused by nonessential encoding metadata in parent folders.
 
 **What It Fixes**:
 1. **Long filenames** - Shortens filenames over 64 characters
    - Applies abbreviations: "Remastered" → "Rmstr", "Deluxe" → "Dlx", "The " → ""
-   - Removes spaces and special characters
+   - Removes nonessential bitrate/encoding tags like `[320kbps CBR]`, `(320 kbps VBR)`, and `@320`
    - Preserves track numbers at beginning
 2. **Invalid characters** - Replaces extended ASCII with safe alternatives
    - é → e, ñ → n, ü → u, etc.
+3. **Some long paths** - Strips nonessential encoding metadata from parent folders
+   - Example: `Album Name [320kbps CBR] @320` → `Album Name`
 
-**What It Reports (but doesn't fix)**:
-- **Path length** - Paths over 60 characters (requires manual folder renaming)
+**What It Reports (but may still not fully fix)**:
+- **Path length** - Paths over 60 characters that still remain too long after filename shortening and metadata stripping
 
 **Character Replacements**:
 ```
