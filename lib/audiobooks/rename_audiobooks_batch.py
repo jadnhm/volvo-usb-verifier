@@ -70,11 +70,11 @@ def extract_track_number(filename):
     # Match patterns like: 01, 001, 1-01, Chapter 01, Track 01, etc.
     patterns = [
         r'^(\d+-\d+)',           # 1-01 (disc-track)
+        r'(\d+) of \d+',          # 1 of 14
         r'Chapter (\d+)',         # Chapter 01
         r'Track (\d+)',           # Track 01
         r'^(\d+)',                # 01 at start
         r'- (\d+)',               # - 01
-        r'(\d+) of \d+',          # 1 of 14
     ]
 
     for pattern in patterns:
@@ -210,20 +210,24 @@ def apply_pattern_to_file(original_path, sample_path, pattern_result, base_dir):
         # Build new filename using the track number
         # Check if result has disc-track pattern (e.g., "1-01.mp3")
         if re.match(r'\d+-\d+\.mp3', result_filename):
-            # Preserve disc-track pattern
-            new_filename = result_filename  # Will be replaced with actual track
-            # Extract disc number if present in original
-            disc_match = re.search(r'Disc (\d+)|Part (\d+)', str(orig_rel), re.IGNORECASE)
-            if disc_match:
-                disc_num = disc_match.group(1) or disc_match.group(2)
-                # Pad track number to match original padding
-                if len(track_num) == 1 and 'of' in orig_filename.lower():
-                    track_num = track_num.zfill(2)
-                new_filename = f"{disc_num}-{track_num}.mp3"
+            if re.match(r'^\d+-\d+$', track_num):
+                new_filename = f"{track_num}.mp3"
             else:
-                # No disc, just use track number with padding from result
-                padding = len(re.search(r'(\d+)\.mp3', result_filename).group(1))
-                new_filename = f"{track_num.zfill(padding)}.mp3"
+            # Preserve disc-track pattern
+                # Preserve disc-track pattern
+                new_filename = result_filename  # Will be replaced with actual track
+                # Extract disc number if present in original
+                disc_match = re.search(r'Disc (\d+)|Part (\d+)', str(orig_rel), re.IGNORECASE)
+                if disc_match:
+                    disc_num = disc_match.group(1) or disc_match.group(2)
+                    # Pad track number to match original padding
+                    if len(track_num) == 1 and 'of' in orig_filename.lower():
+                        track_num = track_num.zfill(2)
+                    new_filename = f"{disc_num}-{track_num}.mp3"
+                else:
+                    # No disc, just use track number with padding from result
+                    padding = len(re.search(r'(\d+)\.mp3', result_filename).group(1))
+                    new_filename = f"{track_num.zfill(padding)}.mp3"
         else:
             # Simple track number pattern
             # Match padding from result

@@ -254,13 +254,13 @@ A separate set of AI-powered tools for intelligently shortening audiobook file p
 **Usage**:
 ```bash
 # Dry run (default)
-python rename_audiobooks_batch.py
+python lib/audiobooks/rename_audiobooks_batch.py
 
 # Preview first 100 files
-python rename_audiobooks_batch.py --limit 100
+python lib/audiobooks/rename_audiobooks_batch.py --limit 100
 
 # Apply changes
-python rename_audiobooks_batch.py --apply
+python lib/audiobooks/rename_audiobooks_batch.py --apply
 ```
 
 **Performance**:
@@ -282,13 +282,13 @@ python rename_audiobooks_batch.py --apply
 **Usage**:
 ```bash
 # Dry run (default)
-python rename_audiobooks.py
+python lib/audiobooks/rename_audiobooks.py
 
 # Apply changes
-python rename_audiobooks.py --apply
+python lib/audiobooks/rename_audiobooks.py --apply
 
 # Limit to first N files
-python rename_audiobooks.py --limit 50
+python lib/audiobooks/rename_audiobooks.py --limit 50
 ```
 
 **When to Use**:
@@ -324,10 +324,10 @@ python rename_audiobooks.py --limit 50
 **Usage**:
 ```bash
 # Run all prompts against all test cases
-python test_path_shortening.py
+python lib/audiobooks/test_path_shortening.py
 
 # Test specific prompt
-python test_path_shortening.py v7_refined
+python lib/audiobooks/test_path_shortening.py v7_refined
 ```
 
 **Test Results**:
@@ -346,7 +346,7 @@ python test_path_shortening.py v7_refined
 
 **Usage**:
 ```bash
-python sample_rename_preview.py
+python lib/audiobooks/sample_rename_preview.py
 ```
 
 **Output Example**:
@@ -364,7 +364,7 @@ python sample_rename_preview.py
 
 ### Step 1: Verify the Drive
 ```bash
-python volvo_usb_verifier.py D:/
+python lib/volvo_usb_verifier.py D:/
 ```
 
 This generates:
@@ -376,10 +376,10 @@ Review the log to understand issues. The CSV is used by the fixer scripts.
 ### Step 2: Fix Path/Filename Issues (Optional)
 ```bash
 # Dry run first
-python volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
+python lib/volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
 
 # If changes look good, apply
-python volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
+python lib/volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
 ```
 
 **Important**:
@@ -388,7 +388,7 @@ python volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --app
 
 ### Step 3: Re-verify After Applied Renames
 ```bash
-python volvo_usb_verifier.py D:/
+python lib/volvo_usb_verifier.py D:/
 ```
 
 Use the fresh verifier CSV for all downstream steps after any applied renames.
@@ -396,15 +396,15 @@ Use the fresh verifier CSV for all downstream steps after any applied renames.
 ### Step 4: Fix ID3 Tag Issues
 ```bash
 # Dry run first
-python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
+python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
 
 # If changes look good, apply
-python volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
+python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
 ```
 
 ### Step 5: Re-verify
 ```bash
-python volvo_usb_verifier.py D:/
+python lib/volvo_usb_verifier.py D:/
 ```
 
 Check the new CSV to see remaining issues (encoding, sample rate, etc.).
@@ -560,7 +560,7 @@ For audiobook renaming tools:
 ```
 
 ### System Requirements
-- Python 3.7 or higher
+- Python 3.11+ recommended
 - Works on Windows, Linux, macOS
 - Claude API key (for audiobook renaming tools only)
 
@@ -574,7 +574,7 @@ For audiobook renaming tools:
 
 ## Key Volvo XC70 2012 Specifications
 
-From `Volvo-stereo.md` research:
+From `docs/volvo_stereo_specs.md` research:
 
 ### Filesystem
 - FAT32 only (not NTFS or exFAT)
@@ -643,16 +643,26 @@ From `Volvo-stereo.md` research:
 
 ```
 .
-├── volvo_usb_verifier.py        # Main detection script
-├── volvo_usb_fixer.py           # ID3 tag fixer
-├── volvo_path_fixer.py          # Path/filename fixer
-├── rename_audiobooks.py         # AI-powered audiobook path shortener
-├── test_path_shortening.py      # Test suite for audiobook renaming
-├── sample_rename_preview.py     # Quick sampling tool
-├── Volvo-stereo.md              # Research/specifications
+├── volvo_pipeline.py            # Main Volvo entry point
 ├── README.md                    # User documentation
-├── DEVELOPMENT.md               # This file (development docs)
-├── AUDIOBOOK_RENAMING.md        # Audiobook renaming documentation
+├── requirements.txt             # Python dependencies for local dev and tests
+├── docs/
+│   ├── DEVELOPMENT.md           # This file (development docs)
+│   └── volvo_stereo_specs.md    # Research/specifications
+├── lib/
+│   ├── volvo_usb_verifier.py    # Main detection script
+│   ├── volvo_usb_fixer.py       # ID3 tag fixer
+│   ├── volvo_path_fixer.py      # Path/filename fixer
+│   ├── volvo_usb_cleaner.py     # Junk file cleaner
+│   ├── volvo_converter.py       # Lossless-to-AAC converter
+│   ├── volvo_folder_splitter.py # Folder-count splitter
+│   └── audiobooks/
+│       ├── rename_audiobooks.py
+│       ├── rename_audiobooks_batch.py
+│       ├── sample_rename_preview.py
+│       ├── test_path_shortening.py
+│       └── AUDIOBOOK_RENAMING.md
+├── tests/                       # Pytest suite for Volvo tooling
 ├── .gitignore                   # Excludes logs/, *.log, test outputs
 ├── VOLVO/                       # Test data directory
 │   └── books/                   # Audiobook files (3,688 MP3s)
@@ -681,7 +691,7 @@ When adding features or fixing bugs:
 
 ## Support & References
 
-- Original specifications: `Volvo-stereo.md`
+- Original specifications: `docs/volvo_stereo_specs.md`
 - Volvo forums: SwedeSpeed, VolvOwners
 - Mutagen documentation: https://mutagen.readthedocs.io/
 - Python threading: https://docs.python.org/3/library/concurrent.futures.html
@@ -694,29 +704,14 @@ This project is provided as-is for personal use. No warranty is provided.
 
 ---
 
-## Session Notes
+## Current Development Priorities
 
-**Last Updated**: 2026-01-04
+1. Add regression coverage for `volvo_pipeline.py`, which is the main user-facing entrypoint.
+2. Add automated CI so the pytest suite runs on every push and pull request.
+3. Improve rename safety in `lib/volvo_path_fixer.py`, especially conflict detection and multi-pass shortening for deeply nested paths.
+4. Continue tightening the top-level pipeline UX, including optional folder-split integration and resume support passthrough.
 
-**Current State**:
-- All three Volvo USB scripts functional and tested
-- Verifier updated to detect path/filename issues (added 2026-01-03)
-- CSV export includes all issue types
-- Test data: 55,420 problem files identified on D: drive
-- Path fixer created but not yet tested on real data
-- **NEW**: Audiobook renaming toolset completed and tested (added 2026-01-04)
-  - rename_audiobooks.py - Main AI-powered renaming script
-  - test_path_shortening.py - Test suite with 10 test cases (100% passing)
-  - sample_rename_preview.py - Quick sampling tool
-  - v7_refined prompt achieves 100% test accuracy
-  - Tested on 50 real files with 98% success rate
-  - Documentation: AUDIOBOOK_RENAMING.md
-
-**Next Steps**:
-1. Test path fixer dry run on D: drive
-2. Consider multithreading for path fixer
-3. Add conflict detection for duplicate names after shortening
-4. Document re-encoding workflow for VBR/sample rate issues
-5. Create example folder structure for organizing <15K files
-6. **Audiobook tools**: Add retry logic for Claude API timeouts
-7. **Audiobook tools**: Consider batch processing for better API efficiency
+1. Add regression coverage for `volvo_pipeline.py`, which is the main user-facing entrypoint.
+2. Add automated CI so the pytest suite runs on every push and pull request.
+3. Improve rename safety in `lib/volvo_path_fixer.py`, especially conflict detection and multi-pass shortening for deeply nested paths.
+4. Continue tightening the top-level pipeline UX, including optional folder-split integration and resume support passthrough.

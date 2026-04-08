@@ -23,7 +23,7 @@ This project consists of two main toolsets:
 3. **`lib/audiobooks/test_path_shortening.py`** - Test suite for path shortening prompts
 4. **`lib/audiobooks/sample_rename_preview.py`** - Quick preview tool for sampling directories
 
-See `AUDIOBOOK_RENAMING.md` for detailed documentation on the audiobook renaming toolset.
+See `lib/audiobooks/AUDIOBOOK_RENAMING.md` for detailed documentation on the audiobook renaming toolset.
 
 ## Installation
 
@@ -90,6 +90,12 @@ Apply cleanup, renames, conversion, and ID3 fixes:
 
 ```bash
 python volvo_pipeline.py D:/ --apply-clean --apply-path --apply-convert --apply-id3
+```
+
+Run the pipeline without the conversion step or ffmpeg:
+
+```bash
+python volvo_pipeline.py D:/ --skip-convert
 ```
 
 ### Run Tests
@@ -346,12 +352,31 @@ python lib/volvo_folder_splitter.py D:/ --apply
 **Workflow**:
 `clean -> verify -> path fix -> verify -> convert -> verify -> ID3 fix -> verify`
 
-**Flags**:
-- `--apply-clean`
-- `--apply-path`
-- `--apply-convert`
-- `--keep-originals-convert`
-- `--apply-id3`
+**Flag reference**:
+
+| Flag | Default | What it does |
+|------|---------|--------------|
+| `--apply-clean` | off | Delete junk/metadata files (`.DS_Store`, `Thumbs.db`, etc.) |
+| `--run-split` | off | Preview folder-count violations before the first verify step |
+| `--apply-split` | off | Actually split overcrowded folders (implies `--run-split`) |
+| `--split-group-size N` | 200 | Max files per split subfolder |
+| `--apply-path` | off | Apply filename and character fixes |
+| `--skip-convert` | off | Skip the lossless conversion step (no `ffmpeg` required) |
+| `--apply-convert` | off | Apply lossless→AAC conversions |
+| `--keep-originals-convert` | off | Keep source files after successful conversion |
+| `--resume-convert` | off | Skip files whose `.m4a` output already exists |
+| `--apply-id3` | off | Apply ID3 tag fixes |
+| `--config FILE` | `volvo_pipeline.ini` | Path to an INI config file |
+
+**Config file**: instead of typing flags every run you can set them permanently in `volvo_pipeline.ini` (in the same directory as the script). A fully-commented example is included in the repo. CLI flags always override config-file values.
+
+```ini
+[pipeline]
+apply_clean = true
+apply_path = true
+apply_id3 = true
+skip_convert = true   # set to false and install ffmpeg to enable conversion
+```
 
 ---
 
@@ -368,7 +393,9 @@ python volvo_pipeline.py D:/ --apply-clean --apply-path --apply-convert --apply-
 
 This helper runs `clean -> verify -> path fix -> verify -> convert -> verify -> ID3 fix -> verify` and automatically uses the fresh verifier CSV after path changes and conversion.
 
-If you need to fix a folder-count violation, run `python lib/volvo_folder_splitter.py ...` first, then restart the pipeline from the beginning so all later CSV/log artifacts reflect the new folder structure.
+Use `--skip-convert` when you want the rest of the pipeline but do not have `ffmpeg` installed or do not want to run the converter step.
+
+If you want folder-count splitting integrated into the run, add `--run-split` for a dry-run preview or `--apply-split` to actually move files before verification begins. `--split-group-size` lets you override the default 200-file target.
 
 ### Step 1: Format Your USB Drive
 
@@ -666,7 +693,7 @@ Based on specifications compiled from:
 - Volvo owner forums (SwedeSpeed, VolvOwners)
 - 2012 Volvo XC70 owner manual USB specifications
 - Real-world testing by Volvo owners
-- Extensive research documented in `Volvo-stereo.md`
+- Extensive research documented in `docs/volvo_stereo_specs.md`
 
 ---
 
@@ -702,7 +729,7 @@ The AI-powered tool intelligently:
 - Extracts disc/part numbers into filenames
 - Maintains proper hierarchy (Author/Series/Book/Track)
 
-See `AUDIOBOOK_RENAMING.md` for complete documentation and examples.
+See `lib/audiobooks/AUDIOBOOK_RENAMING.md` for complete documentation and examples.
 
 ---
 

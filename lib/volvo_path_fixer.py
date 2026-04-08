@@ -194,6 +194,32 @@ class VolvoPathFixer:
             fixes_applied.append(f"Shortened filename to {len(new_filename)} chars")
             self.stats['filenames_shortened'] += 1
 
+        # Collision detection: if the computed target path already exists as a
+        # *different* file, generate a safe unique name by appending _2, _3, etc.
+        if str(new_path) != file_path:
+            candidate = self.drive_path / new_path
+            try:
+                same_file = candidate.exists() and candidate.resolve() == full_path.resolve()
+            except OSError:
+                same_file = False
+            if candidate.exists() and not same_file:
+                stem = new_path.stem
+                ext = new_path.suffix
+                parent = new_path.parent
+                counter = 2
+                while True:
+                    new_path = parent / f"{stem}_{counter}{ext}"
+                    try:
+                        exists = (self.drive_path / new_path).exists()
+                        is_self = exists and (self.drive_path / new_path).resolve() == full_path.resolve()
+                    except OSError:
+                        exists, is_self = False, False
+                    if not exists or is_self:
+                        break
+                    counter += 1
+                fixes_applied.append(f"Resolved name collision → {new_path.name}")
+                self.stats['collisions_resolved'] += 1
+
         # Check if path is too long (for reporting only, don't try to fix)
         if len(str(new_path)) > self.MAX_PATH_LENGTH:
             self.paths_too_long.append((file_path, str(new_path), len(str(new_path))))
@@ -359,9 +385,14 @@ class VolvoPathFixer:
 
         if self.stats:
             self.log(f"\nFixes that would be applied:" if self.dry_run else f"\nFixes applied:")
-            for fix_type, count in sorted(self.stats.items()):
-                fix_name = fix_type.replace('_', ' ').title()
-                self.log(f"  {fix_name}: {count}")
+            display_order = [
+                'invalid_chars_fixed', 'filenames_shortened',
+                'collisions_resolved', 'files_renamed',
+            ]
+            for fix_type in display_order + sorted(set(self.stats) - set(display_order)):
+                if fix_type in self.stats:
+                    fix_name = fix_type.replace('_', ' ').title()
+                    self.log(f"  {fix_name}: {self.stats[fix_type]}")
 
         # Show paths that are too long
         if self.paths_too_long:
