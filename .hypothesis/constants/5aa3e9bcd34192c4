@@ -1,0 +1,4 @@
+# file: C:\Users\joel.dunham\AppData\Roaming\Python\Python314\site-packages\mutagen\asf\_attrs.py
+# hypothesis_version: 6.151.11
+
+[b'\x00\x00', '\x00', '%r not str', '%s(%r', ')', ', language=%d', ', stream=%d', '<H', '<HH', '<HHHHI', '<I', '<L', '<Q', 'Out of range', 'utf-16-le', 'utf-8']

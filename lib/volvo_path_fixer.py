@@ -19,6 +19,7 @@ import os
 import sys
 import csv
 import logging
+import random
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Set
@@ -77,11 +78,12 @@ class VolvoPathFixer:
     MAX_PATH_LENGTH = 60
     MAX_FILENAME_LENGTH = 64
 
-    def __init__(self, csv_file: str, drive_path: str, dry_run: bool = True, manifest_file: Optional[str] = None):
+    def __init__(self, csv_file: str, drive_path: str, dry_run: bool = True, manifest_file: Optional[str] = None, sample: Optional[int] = None):
         self.csv_file = Path(csv_file)
         self.drive_path = Path(drive_path)
         self.dry_run = dry_run
         self.manifest_file = Path(manifest_file) if manifest_file else None
+        self.sample = sample
         self.logger = logging.getLogger('VolvoPathFixer')
 
         # Statistics
@@ -144,6 +146,11 @@ class VolvoPathFixer:
 
         # Process files
         total_files = len(issues_by_file)
+        if self.sample and self.sample < total_files:
+            sampled = random.sample(list(issues_by_file.items()), self.sample)
+            issues_by_file = dict(sampled)
+            total_files = self.sample
+            self.log(f"  (Sampling {total_files} files at random)")
         self.log(f"\nProcessing {total_files} files...")
 
         for idx, (file_path, issues) in enumerate(issues_by_file.items(), 1):
@@ -356,13 +363,20 @@ class VolvoPathFixer:
 
         # If still too long, truncate intelligently
         max_stem_length = self.MAX_FILENAME_LENGTH - len(ext)
+        if max_stem_length <= 0:
+            # Extension alone exceeds the limit; no safe truncation possible.
+            return filename
         if len(stem) > max_stem_length:
             # Try to keep track number at beginning
             track_match = re.match(r'^(\d+[\s\-\.]*)', stem)
             if track_match:
                 track_num = track_match.group(1)
                 remaining_length = max_stem_length - len(track_num)
-                stem = track_num + stem[len(track_num):len(track_num) + remaining_length]
+                if remaining_length >= 0:
+                    stem = track_num + stem[len(track_num):len(track_num) + remaining_length]
+                else:
+                    # Track number itself is longer than the available space; truncate it.
+                    stem = stem[:max_stem_length]
             else:
                 stem = stem[:max_stem_length]
 
@@ -472,6 +486,8 @@ WARNING: Always backup your files before running with --apply!
     parser.add_argument('drive_path', help='Path to USB drive or media folder')
     parser.add_argument('--apply', action='store_true',
                        help='Apply fixes (default is dry run)')
+    parser.add_argument('--sample', type=int, metavar='N',
+                       help='Randomly process only N files from the issue list (useful for dry-run spot checks)')
 
     args = parser.parse_args()
 
@@ -491,7 +507,7 @@ WARNING: Always backup your files before running with --apply!
 
     # Run fixer
     dry_run = not args.apply
-    fixer = VolvoPathFixer(args.csv_file, args.drive_path, dry_run=dry_run, manifest_file=manifest_file)
+    fixer = VolvoPathFixer(args.csv_file, args.drive_path, dry_run=dry_run, manifest_file=manifest_file, sample=args.sample)
     fixer.fix_all()
 
     print(f"\nLog file saved to: {log_file}")

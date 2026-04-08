@@ -1,0 +1,4 @@
+# file: C:\Users\joel.dunham\Desktop\Volvo Media Project\lib\volvo_usb_fixer.py
+# hypothesis_version: 6.151.11
+
+['%(message)s', '%Y%m%d_%H%M%S', '--apply', '.m4a', '.m4b', '.mp3', 'APIC', 'Album Art', 'Converted to ID3v2.3', 'DRY RUN', 'File not found', 'ID3', 'ID3v2.4', 'LIVE MODE', 'Large artwork', 'No ID3 tags found', 'SUMMARY', 'Unusual ID3 version', 'VolvoUSBFixer', '_', '__main__', 'added_tags', 'converted_tags', 'covr', 'csv_file', 'description', 'drive_path', 'encoding', 'file_path', 'files_modified', 'issue_type', 'logs', 'r', 'removed_artwork', 'replace', 'store_true', 'utf-8', 'win32', '✓', '✗']

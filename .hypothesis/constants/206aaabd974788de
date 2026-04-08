@@ -1,0 +1,4 @@
+# file: C:\Users\joel.dunham\Desktop\Volvo Media Project\volvo_pipeline.py
+# hypothesis_version: 6.151.11
+
+[0.0, 200, '\nPipeline complete.', '--apply', '--apply-clean', '--apply-convert', '--apply-id3', '--apply-path', '--apply-split', '--config', '--group-size', '--keep-originals', '--resume', '--resume-convert', '--run-split', '--skip-convert', '--split-group-size', 'FILE', 'Install it with:', '__main__', 'apply_clean', 'apply_convert', 'apply_id3', 'apply_path', 'apply_split', 'drive_path', 'ffmpeg', 'lib', 'logs', 'pipeline', 'resume_convert', 'run_split', 'skip_convert', 'split_group_size', 'store_true', 'utf-8', 'volvo_converter.py', 'volvo_path_fixer.py', 'volvo_pipeline.ini', 'volvo_usb_cleaner.py', 'volvo_usb_fixer.py', 'volvo_verify_*.csv']

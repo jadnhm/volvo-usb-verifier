@@ -1,0 +1,4 @@
+# file: C:\Users\joel.dunham\AppData\Roaming\Python\Python314\site-packages\mutagen\mp3\_util.py
+# hypothesis_version: 6.151.11
+
+[b'\x00', b'\x00\x00\x00\x00', b' ', b'(', b'.', b'EMAL', b'Info', b'L3.99', b'LAME', b'VBRI', b'Xing', b'a', b'b', b'r', 10.0, 100, 255, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 19000, 19500, ' (?)', ' (alpha)', ' (beta)', '%d.%d%s', '%d.%d%s%s', '--abr %d', '--abr %d+', '--alt-preset %d', '--alt-preset %d+', '--alt-preset extreme', '--preset %d', '--preset extreme', '--preset fast medium', '--preset insane', '--preset medium', '--preset r3mix', '--preset standard', '-V %s', '-V %s --vbr-new', '-V %s --vbr-old', '-b %d', '-b 255+', '.0', '.0+', '.1+', 'Not a VBRI header', 'Not a Xing header', 'Not a lame header', 'Not enough data', 'ascii']

@@ -1,0 +1,4 @@
+# file: C:\Users\joel.dunham\Desktop\Volvo Media Project\lib\volvo_folder_splitter.py
+# hypothesis_version: 6.151.11
+
+[200, 254, '%(message)s', '%Y%m%d_%H%M%S', '--apply', '--group-size', '.aac', '.m4a', '.m4b', '.mp3', '.wma', '0', 'DRY RUN', 'LIVE MODE', 'SUMMARY', 'Splitting', 'VolvoFolderSplitter', 'Would split', 'Z', '__main__', 'drive_path', 'error', 'errors', 'files_moved', 'groups_created', 'logs', 'message', 'moved', 'new_path', 'original_path', 'replace', 'seconds', 'status', 'store_true', 'timestamp', 'utf-8', 'w', 'win32', 'would_move', 'would_split']

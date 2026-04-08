@@ -1,0 +1,4 @@
+# file: C:\Users\joel.dunham\Desktop\Volvo Media Project\lib\volvo_converter.py
+# hypothesis_version: 6.151.11
+
+[-400, 300, '%(message)s', '%Y%m%d_%H%M%S', '+faststart', '--apply', '--keep-originals', '--resume', '-ar', '-b:a', '-c:a', '-i', '-map_metadata', '-movflags', '-y', '.aif', '.aiff', '.alac', '.ape', '.flac', '.m4a', '.m4b', '.wav', '0', '192k', '44100', 'DRY RUN', 'Install it with:', 'LIVE MODE', 'SUMMARY', 'VolvoConverter', '__main__', '_converted', 'aac', 'alac', 'codec', 'converted', 'drive_path', 'failed', 'ffmpeg', 'logs', 'message', 'new_path', 'no stderr', 'original_path', 'replace', 'seconds', 'skipped_resume', 'status', 'store_true', 'timestamp', 'utf-8', 'w', 'win32', 'would_convert']

@@ -1,0 +1,4 @@
+# file: C:\Users\joel.dunham\AppData\Roaming\Python\Python314\site-packages\mutagen\oggvorbis.py
+# hypothesis_version: 6.151.11
+
+[b'\x00', b'\x01vorbis', b'\x03vorbis', b'OggS', 0.0, '<BI3i', 'OggVorbis', 'Open', 'audio/vorbis', 'audio/x-vorbis', 'delete', 'page has not packets']

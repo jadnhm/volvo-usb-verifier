@@ -1,0 +1,4 @@
+# file: C:\Users\joel.dunham\AppData\Roaming\Python\Python314\site-packages\mutagen\mp3\__init__.py
+# hypothesis_version: 6.151.11
+
+[b'.mp2', b'.mp3', b'.mpeg', b'.mpg', b'ID3', b'\xff', b'\xff\xf2', b'\xff\xf3', b'\xff\xfa', b'\xff\xfb', 1.0, 2.0, 2.5, 112, 128, 144, 160, 176, 192, 224, 256, 288, 320, 352, 384, 416, 448, 576, 1000, 1024, 1152, 1500, 2047, 8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000, ' (sketchy)', ', %s', '.', '>3sxxx4s', 'CBR?', 'FhG', 'LAME %s', 'MP3', 'Open', 'audio/mp%d', 'audio/mpeg', 'audio/mpg', 'audio/x-mp%d', 'audio/x-mpeg', 'delete', 'invalid header', 'invalid sync', 'truncated header']

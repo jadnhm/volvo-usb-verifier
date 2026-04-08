@@ -1,0 +1,4 @@
+# file: C:\Users\joel.dunham\Desktop\Volvo Media Project\lib\audiobooks\rename_audiobooks_batch.py
+# hypothesis_version: 6.151.11
+
+[100, '(\\d+) of \\d+', '(\\d+)\\.mp3', '**', '*.mp3', '- (\\d+)', '--apply', '--dir', '--limit', '--print', '.mp3', '/', ':', 'APPLYING CHANGES', 'Cancelled.', 'Chapter (\\d+)', 'N', 'SUMMARY', 'Track (\\d+)', 'VOLVO/books', '\\', '\\d+-\\d+\\.mp3', '^(\\d+)', '^(\\d+-\\d+)', '^\\d+-\\d+$', '__main__', '`', 'books/', 'claude', 'error', 'new', 'new_rel', 'of', 'original', 'original_rel', 'store_true', 'timeout', 'utf-8', 'y']

@@ -1,0 +1,4 @@
+# file: C:\Users\joel.dunham\AppData\Roaming\Python\Python314\site-packages\mutagen\asf\_objects.py
+# hypothesis_version: 6.151.11
+
+[b'\x00', b'\x00\x00', b'\x01\x02', b'\x06\x00', b'\x11\xd2\xd3\xab\xba\xa9\xcf\x11', b'\x8e\xe6\x00\xc0\x0c Se', 0.0, 1000.0, 10000000.0, '\x00', '%s(%s)', '<16sQ', '<H', '<HH', '<HHHHH', '<HHHHI', '<HII', '<I', '<Q', '<QH', '<QL', '<QQQ', 'Author', 'Copyright', 'Description', 'Not an ASF file.', 'Rating', 'Title', 'data', 'dword', 'invalid codec entry', 'invalid header size', 'invalid object size', 'language', 'stream', 'truncated', 'truncated content', 'utf-16-le']
