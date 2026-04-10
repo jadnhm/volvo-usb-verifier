@@ -255,14 +255,16 @@ class VolvoUSBFixer:
             if any("Large artwork" in i['description'] for i in id3_issues):
                 if self.dry_run:
                     fixes_applied.append("Would remove large album artwork")
+                    with self.stats_lock:
+                        self.stats['removed_artwork'] += 1
                 else:
                     if audio.tags:
                         # Remove all APIC frames (album art)
                         audio.tags.delall('APIC')
                         modified = True
                         fixes_applied.append("Removed large album artwork")
-                with self.stats_lock:
-                    self.stats['removed_artwork'] += 1
+                        with self.stats_lock:
+                            self.stats['removed_artwork'] += 1
 
             # Save changes
             if modified:
@@ -311,14 +313,15 @@ class VolvoUSBFixer:
 
         if self.dry_run:
             fixes_applied.append("Would remove large album artwork")
+            with self.stats_lock:
+                self.stats['removed_artwork'] += 1
         else:
             if audio.tags and 'covr' in audio.tags:
                 del audio.tags['covr']
                 modified = True
                 fixes_applied.append("Removed large album artwork")
-
-        with self.stats_lock:
-            self.stats['removed_artwork'] += 1
+                with self.stats_lock:
+                    self.stats['removed_artwork'] += 1
 
         if modified:
             try:

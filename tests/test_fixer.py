@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -25,6 +25,13 @@ def _make_fixer(csv_path: str, drive_path: str) -> VolvoUSBFixer:
     fixer.drive_path = Path(drive_path)
     fixer.dry_run = True
     fixer.logger = MagicMock()
+    import threading
+    fixer.stats = {}
+    fixer.stats_lock = threading.Lock()
+    fixer.fixed_files = []
+    fixer.fixed_files_lock = threading.Lock()
+    fixer.failed_files = []
+    fixer.failed_files_lock = threading.Lock()
     fixer._messages = []
     fixer.log = lambda m: fixer._messages.append(m)
     return fixer
@@ -137,6 +144,110 @@ class TestLoadIssues(unittest.TestCase):
         fixer = VolvoUSBFixer(csv_path, self.tmp.name, dry_run=True)
         issues = fixer.load_issues()
         self.assertEqual(len(issues), 0)
+
+
+class TestFixMp3File(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self.tmp.name)
+        self.file_path = self.base / 'song.mp3'
+        self.file_path.write_bytes(b'data')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    @patch('lib.volvo_usb_fixer.MP3')
+    def test_dry_run_reports_id3v24_conversion(self, mock_mp3):
+        fixer = VolvoUSBFixer('dummy.csv', str(self.base), dry_run=True, num_threads=1)
+        audio = MagicMock()
+        audio.tags = MagicMock()
+        mock_mp3.return_value = audio
+
+        rel_path, fixes, success = fixer.fix_mp3_file(
+            self.file_path,
+            'song.mp3',
+            [{'issue_type': 'ID3 Tags', 'description': 'ID3v2.4 found'}],
+        )
+
+        self.assertTrue(success)
+        self.assertEqual(rel_path, 'song.mp3')
+        self.assertIn('Would convert ID3v2.4 to ID3v2.3', fixes)
+        self.assertEqual(fixer.stats['converted_tags'], 1)
+        audio.save.assert_not_called()
+
+    @patch('lib.volvo_usb_fixer.MP3')
+    def test_apply_adds_basic_tags_and_saves_v23(self, mock_mp3):
+        fixer = VolvoUSBFixer('dummy.csv', str(self.base), dry_run=False, num_threads=1)
+        audio = MagicMock()
+        audio.tags = None
+        mock_mp3.return_value = audio
+
+        rel_path, fixes, success = fixer.fix_mp3_file(
+            self.file_path,
+            'song.mp3',
+            [{'issue_type': 'ID3 Tags', 'description': 'No ID3 tags found'}],
+        )
+
+        self.assertTrue(success)
+        self.assertEqual(rel_path, 'song.mp3')
+        self.assertIn('Added basic ID3v2.3 tags', fixes)
+        audio.save.assert_called_once_with(v1=2, v2_version=3)
+        self.assertEqual(fixer.stats['added_tags'], 1)
+        self.assertEqual(fixer.stats['files_modified'], 1)
+
+
+class TestFixM4AFile(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self.tmp.name)
+        self.file_path = self.base / 'song.m4a'
+        self.file_path.write_bytes(b'data')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    @patch('lib.volvo_usb_fixer.MP4')
+    def test_dry_run_reports_artwork_removal(self, mock_mp4):
+        fixer = VolvoUSBFixer('dummy.csv', str(self.base), dry_run=True, num_threads=1)
+        audio = MagicMock()
+        audio.tags = {'covr': [b'art']}
+        mock_mp4.return_value = audio
+
+        rel_path, fixes, success = fixer.fix_m4a_file(
+            self.file_path,
+            'song.m4a',
+            [{'issue_type': 'Album Art', 'description': 'Large artwork: 800 KB'}],
+        )
+
+        self.assertTrue(success)
+        self.assertEqual(rel_path, 'song.m4a')
+        self.assertIn('Would remove large album artwork', fixes)
+        audio.save.assert_not_called()
+        self.assertEqual(fixer.stats['removed_artwork'], 1)
+
+    @patch('lib.volvo_usb_fixer.MP4')
+    def test_apply_removes_covr_and_saves(self, mock_mp4):
+        fixer = VolvoUSBFixer('dummy.csv', str(self.base), dry_run=False, num_threads=1)
+        tags = {'covr': [b'art']}
+        audio = MagicMock()
+        audio.tags = tags
+        mock_mp4.return_value = audio
+
+        rel_path, fixes, success = fixer.fix_m4a_file(
+            self.file_path,
+            'song.m4a',
+            [{'issue_type': 'Album Art', 'description': 'Large artwork: 800 KB'}],
+        )
+
+        self.assertTrue(success)
+        self.assertEqual(rel_path, 'song.m4a')
+        self.assertIn('Removed large album artwork', fixes)
+        self.assertNotIn('covr', audio.tags)
+        audio.save.assert_called_once_with()
+        self.assertEqual(fixer.stats['removed_artwork'], 1)
+        self.assertEqual(fixer.stats['files_modified'], 1)
 
 
 if __name__ == '__main__':

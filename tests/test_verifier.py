@@ -195,6 +195,32 @@ class TestVerifyAllCsvBehavior(unittest.TestCase):
             self.assertEqual(len(content), 1)
 
 
+class TestWindowsFilesystemHelpers(unittest.TestCase):
+
+    @patch('lib.volvo_usb_verifier.subprocess.run')
+    def test_verify_filesystem_windows_calls_wmic_without_shell(self, mock_run):
+        verifier = _make_verifier()
+        verifier.drive_path = Path('E:/')
+        mock_run.return_value = MagicMock(returncode=0, stdout='FileSystem=FAT32\nBlockSize=32768\n')
+
+        with patch.object(verifier, '_get_disk_number_windows', return_value=None):
+            verifier._verify_filesystem_windows()
+
+        self.assertFalse(mock_run.call_args.kwargs.get('shell', False))
+        self.assertEqual(mock_run.call_args.args[0][:3], ['wmic', 'volume', 'where'])
+
+    @patch('lib.volvo_usb_verifier.subprocess.run')
+    def test_get_disk_number_windows_calls_wmic_without_shell(self, mock_run):
+        verifier = _make_verifier()
+        mock_run.return_value = MagicMock(returncode=0, stdout='DiskIndex=4\n')
+
+        disk_num = verifier._get_disk_number_windows('E:')
+
+        self.assertEqual(disk_num, 4)
+        self.assertFalse(mock_run.call_args.kwargs.get('shell', False))
+        self.assertEqual(mock_run.call_args.args[0][:3], ['wmic', 'partition', 'where'])
+
+
 class TestVerifyStructure(unittest.TestCase):
 
     def test_root_folder_count_only_counts_immediate_children(self):

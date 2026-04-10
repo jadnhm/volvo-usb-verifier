@@ -253,9 +253,9 @@ def main():
 Finds folders with more than {MAX_FILES_PER_FOLDER} audio files and splits them
 into numbered alphabetical subfolders (default max {DEFAULT_GROUP_SIZE} files each).
 
-Run this as a standalone step; it is not part of volvo_pipeline.py because
-it changes the folder structure and the pipeline must be re-run from the
-start afterwards.
+This tool can be run standalone or through volvo_pipeline.py.
+If you apply splits, re-run verification afterwards because the folder
+structure has changed.
 
 Examples:
   # Dry run - see what would be split

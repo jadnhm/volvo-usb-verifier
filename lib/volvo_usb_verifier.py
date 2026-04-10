@@ -27,6 +27,7 @@ import subprocess
 import json
 import logging
 import csv
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from collections import defaultdict
@@ -149,9 +150,19 @@ class VolvoUSBVerifier:
                 self.warnings.append("Could not determine drive letter. Skipping filesystem checks.")
                 return
 
-            # Use wmic to get filesystem info
-            cmd = f'wmic volume where "DriveLetter=\'{drive_letter}\'" get FileSystem,BlockSize /format:list'
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            result = subprocess.run(
+                [
+                    'wmic',
+                    'volume',
+                    'where',
+                    f"DriveLetter='{drive_letter}'",
+                    'get',
+                    'FileSystem,BlockSize',
+                    '/format:list',
+                ],
+                capture_output=True,
+                text=True,
+            )
 
             if result.returncode == 0:
                 output = result.stdout
@@ -189,8 +200,19 @@ class VolvoUSBVerifier:
     def _get_disk_number_windows(self, drive_letter: str) -> Optional[int]:
         """Get physical disk number for a drive letter on Windows."""
         try:
-            cmd = f'wmic partition where "DeviceID LIKE \'%{drive_letter[0]}%\'" get DiskIndex /format:list'
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            result = subprocess.run(
+                [
+                    'wmic',
+                    'partition',
+                    'where',
+                    f"DeviceID LIKE '%{drive_letter[0]}%'",
+                    'get',
+                    'DiskIndex',
+                    '/format:list',
+                ],
+                capture_output=True,
+                text=True,
+            )
 
             if result.returncode == 0:
                 for line in result.stdout.split('\n'):
@@ -202,21 +224,18 @@ class VolvoUSBVerifier:
 
     def _check_partition_scheme_windows(self, disk_num: int):
         """Check if disk uses MBR partition scheme on Windows."""
+        script_path = None
         try:
-            # Create diskpart script
-            script_content = f"select disk {disk_num}\ndetail disk\nexit\n"
-            script_path = Path.home() / "volvo_verify_temp.txt"
-
-            with open(script_path, 'w') as f:
-                f.write(script_content)
+            # Create diskpart script in a unique temp file and clean it up reliably.
+            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.txt', encoding='utf-8') as f:
+                f.write(f"select disk {disk_num}\ndetail disk\nexit\n")
+                script_path = Path(f.name)
 
             result = subprocess.run(
                 ['diskpart', '/s', str(script_path)],
                 capture_output=True,
                 text=True
             )
-
-            script_path.unlink()
 
             if result.returncode == 0:
                 output = result.stdout.lower()
@@ -228,6 +247,9 @@ class VolvoUSBVerifier:
                     self.warnings.append("⚠ Could not determine partition scheme")
         except Exception as e:
             self.warnings.append(f"Could not verify partition scheme: {e}")
+        finally:
+            if script_path is not None:
+                script_path.unlink(missing_ok=True)
 
     def _verify_filesystem_linux(self):
         """Linux-specific filesystem verification."""
