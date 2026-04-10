@@ -336,8 +336,8 @@ class VolvoUSBVerifier:
             if root_path != self.drive_path:
                 total_folders += 1
 
-            # Count root folders
-            if root_path.parent == self.drive_path:
+            # Count only immediate children of the drive root once.
+            if root_path == self.drive_path:
                 root_folders += len(dirs)
 
             # Calculate nesting depth

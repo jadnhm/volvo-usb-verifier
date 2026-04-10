@@ -140,7 +140,7 @@ class TestMainOrchestration(unittest.TestCase):
         with patch.object(sys, 'argv', ['volvo_pipeline.py', 'D:/']):
             volvo_pipeline.main()
 
-        mock_check_ffmpeg.assert_called_once_with()
+        mock_check_ffmpeg.assert_not_called()
         self.assertFalse(mock_run_cleaner.call_args.args[3])
         self.assertFalse(mock_run_folder_splitter.called)
         self.assertFalse(mock_run_path_fixer.call_args.args[4])
@@ -148,6 +148,37 @@ class TestMainOrchestration(unittest.TestCase):
         self.assertFalse(mock_run_converter.call_args.args[4])
         self.assertFalse(mock_run_converter.call_args.args[5])
         self.assertFalse(mock_run_id3_fixer.call_args.args[4])
+
+    @patch('volvo_pipeline.run_id3_fixer')
+    @patch('volvo_pipeline.run_converter')
+    @patch('volvo_pipeline.run_path_fixer')
+    @patch('volvo_pipeline.run_verifier')
+    @patch('volvo_pipeline.run_folder_splitter')
+    @patch('volvo_pipeline.run_cleaner')
+    @patch('volvo_pipeline.check_ffmpeg')
+    def test_apply_convert_requires_ffmpeg(
+        self,
+        mock_check_ffmpeg,
+        mock_run_cleaner,
+        mock_run_folder_splitter,
+        mock_run_verifier,
+        mock_run_path_fixer,
+        mock_run_converter,
+        mock_run_id3_fixer,
+    ):
+        mock_run_verifier.side_effect = [
+            Path('logs/initial.csv'),
+            Path('logs/post_path.csv'),
+            Path('logs/post_convert.csv'),
+            Path('logs/final.csv'),
+        ]
+        mock_run_path_fixer.return_value = Path('logs/path_manifest.csv')
+        mock_run_converter.return_value = Path('logs/convert_manifest.csv')
+
+        with patch.object(sys, 'argv', ['volvo_pipeline.py', 'D:/', '--apply-convert']):
+            volvo_pipeline.main()
+
+        mock_check_ffmpeg.assert_called_once_with()
 
     @patch('volvo_pipeline.run_id3_fixer')
     @patch('volvo_pipeline.run_converter')

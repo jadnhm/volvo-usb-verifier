@@ -560,6 +560,7 @@ For audiobook renaming tools:
 ```
 
 ### System Requirements
+- Python 3.9+ required
 - Python 3.11+ recommended
 - Works on Windows, Linux, macOS
 - Claude API key (for audiobook renaming tools only)

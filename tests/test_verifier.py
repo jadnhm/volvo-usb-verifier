@@ -195,5 +195,23 @@ class TestVerifyAllCsvBehavior(unittest.TestCase):
             self.assertEqual(len(content), 1)
 
 
+class TestVerifyStructure(unittest.TestCase):
+
+    def test_root_folder_count_only_counts_immediate_children(self):
+        verifier = _make_verifier()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            (base / 'ArtistA' / 'Album').mkdir(parents=True)
+            (base / 'ArtistB').mkdir()
+            (base / 'ArtistA' / 'Album' / 'track.mp3').write_bytes(b'')
+
+            verifier.drive_path = base
+            verifier.file_stats = {}
+            verifier.verify_structure()
+
+            self.assertIn('✓ Root folders: 2 (max 1000)', verifier.info)
+
+
 if __name__ == '__main__':
     unittest.main()

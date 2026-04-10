@@ -17,7 +17,7 @@ Skips everything else — MP3, WMA, and already-compliant AAC are left untouched
 VBR / bitrate / sample-rate issues in MP3 files are NOT converted; keep them as
 warnings and handle with foobar2000 or similar if needed.
 
-Requires ffmpeg on PATH:
+Requires ffmpeg on PATH for live conversions:
   Windows: winget install Gyan.FFmpeg
   macOS:   brew install ffmpeg
   Linux:   sudo apt install ffmpeg
@@ -382,7 +382,7 @@ Converts lossless formats (FLAC, WAV, AIFF, APE, ALAC) to AAC 192kbps M4A.
 Leaves MP3, WMA, and existing AAC/M4A files untouched.
 VBR/bitrate/sample-rate issues in MP3 files are left as warnings.
 
-Requires ffmpeg: https://ffmpeg.org/download.html
+Live conversions require ffmpeg: https://ffmpeg.org/download.html
 
 Examples:
   # Dry run - see what would be converted
@@ -412,14 +412,16 @@ WARNING: Always backup your files before running with --apply!
         print(f"ERROR: Path not found: {args.drive_path}")
         sys.exit(1)
 
-    ffmpeg_path = check_ffmpeg()
-    print(f"Using ffmpeg: {ffmpeg_path}\n")
-
     log_file, manifest_file = setup_logging()
     print(f"Logging to: {log_file}")
     print(f"Conversion manifest will be saved to: {manifest_file}\n")
 
     dry_run = not args.apply
+    ffmpeg_path = 'ffmpeg'
+    if args.apply:
+        ffmpeg_path = check_ffmpeg()
+        print(f"Using ffmpeg: {ffmpeg_path}\n")
+
     converter = VolvoConverter(
         args.drive_path,
         dry_run=dry_run,

@@ -277,7 +277,8 @@ Examples:
 
     id3_input_csv = refreshed_csv
     if not args.skip_convert:
-        check_ffmpeg()
+        if args.apply_convert:
+            check_ffmpeg()
         convert_manifest = run_converter(
             python_cmd,
             script_dir,

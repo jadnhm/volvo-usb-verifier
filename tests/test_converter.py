@@ -244,5 +244,44 @@ class TestLiveConversionSafety(unittest.TestCase):
         self.assertEqual(converter.stats['failed'], 1)
 
 
+class TestConverterMain(unittest.TestCase):
+
+    @patch('lib.volvo_converter.VolvoConverter.convert_all')
+    @patch('lib.volvo_converter.setup_logging', return_value=('logs/test.log', 'logs/test.csv'))
+    @patch('lib.volvo_converter.check_ffmpeg')
+    def test_main_dry_run_does_not_require_ffmpeg(
+        self,
+        mock_check_ffmpeg,
+        _mock_setup_logging,
+        mock_convert_all,
+    ):
+        import lib.volvo_converter as converter_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(sys, 'argv', ['volvo_converter.py', tmp]):
+                converter_module.main()
+
+        mock_check_ffmpeg.assert_not_called()
+        mock_convert_all.assert_called_once_with('ffmpeg')
+
+    @patch('lib.volvo_converter.VolvoConverter.convert_all')
+    @patch('lib.volvo_converter.setup_logging', return_value=('logs/test.log', 'logs/test.csv'))
+    @patch('lib.volvo_converter.check_ffmpeg', return_value='C:/ffmpeg/bin/ffmpeg.exe')
+    def test_main_apply_requires_ffmpeg(
+        self,
+        mock_check_ffmpeg,
+        _mock_setup_logging,
+        mock_convert_all,
+    ):
+        import lib.volvo_converter as converter_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(sys, 'argv', ['volvo_converter.py', tmp, '--apply']):
+                converter_module.main()
+
+        mock_check_ffmpeg.assert_called_once_with()
+        mock_convert_all.assert_called_once_with('C:/ffmpeg/bin/ffmpeg.exe')
+
+
 if __name__ == '__main__':
     unittest.main()

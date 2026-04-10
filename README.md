@@ -29,7 +29,7 @@ See `lib/audiobooks/AUDIOBOOK_RENAMING.md` for detailed documentation on the aud
 
 ### Prerequisites
 
-1. **Python 3.7 or higher**
+1. **Python 3.9 or higher**
    - Windows: Download from [python.org](https://www.python.org/downloads/)
    - Linux: Usually pre-installed, or use `sudo apt install python3`
    - macOS: Use Homebrew: `brew install python3`
@@ -55,6 +55,7 @@ The intended entry point for Volvo work is the top-level `volvo_pipeline.py` scr
 
 ### Recommended Python Version
 
+- Python 3.9+ required
 - Python 3.11+ recommended
 - Python 3.14 works in this repo and is currently in use, but some editor tooling may lag behind very new Python releases
 
