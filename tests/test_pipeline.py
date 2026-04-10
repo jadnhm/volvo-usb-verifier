@@ -24,7 +24,57 @@ class TestCheckFfmpeg(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
 
 
+class TestRunVerifier(unittest.TestCase):
+
+    def test_run_verifier_accepts_issues_exit_when_fresh_csv_exists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log_dir = Path(tmp)
+            old_csv = log_dir / 'volvo_verify_drive_old.csv'
+            old_csv.write_text('old', encoding='utf-8')
+            fresh_csv = log_dir / 'volvo_verify_drive_new.csv'
+
+            def fake_run_step(_command, _label, allowed_exit_codes=None):
+                fresh_csv.write_text('new', encoding='utf-8')
+                return volvo_pipeline.VERIFIER_EXIT_ISSUES_FOUND
+
+            with patch('volvo_pipeline.run_step', side_effect=fake_run_step):
+                result = volvo_pipeline.run_verifier('python', Path('.'), 'D:/', log_dir, 'Verify')
+
+        self.assertEqual(result, fresh_csv)
+
+    def test_run_verifier_refuses_stale_csv_when_no_fresh_report_exists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log_dir = Path(tmp)
+            stale_csv = log_dir / 'volvo_verify_drive_old.csv'
+            stale_csv.write_text('old', encoding='utf-8')
+
+            with patch('volvo_pipeline.run_step', return_value=volvo_pipeline.VERIFIER_EXIT_ISSUES_FOUND):
+                with self.assertRaises(SystemExit) as ctx:
+                    volvo_pipeline.run_verifier('python', Path('.'), 'D:/', log_dir, 'Verify')
+
+        self.assertEqual(ctx.exception.code, volvo_pipeline.VERIFIER_EXIT_FATAL)
+
+
 class TestMainOrchestration(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.run_dir_index = 0
+        self.run_dir_patcher = patch(
+            'volvo_pipeline.create_run_output_dir',
+            side_effect=self._fake_run_output_dir,
+        )
+        self.run_dir_patcher.start()
+
+    def tearDown(self):
+        self.run_dir_patcher.stop()
+        self.tmp.cleanup()
+
+    def _fake_run_output_dir(self, base_dir, prefix):
+        path = Path(self.tmp.name) / f"{prefix}_{self.run_dir_index:02d}"
+        self.run_dir_index += 1
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
     @patch('volvo_pipeline.run_id3_fixer')
     @patch('volvo_pipeline.run_converter')
@@ -76,12 +126,14 @@ class TestMainOrchestration(unittest.TestCase):
         cleaner_args = mock_run_cleaner.call_args.args
         self.assertEqual(cleaner_args[2], 'D:/')
         self.assertTrue(cleaner_args[3])
+        self.assertIsInstance(cleaner_args[4], Path)
 
         mock_run_folder_splitter.assert_called_once()
         split_args = mock_run_folder_splitter.call_args.args
         self.assertEqual(split_args[2], 'D:/')
         self.assertTrue(split_args[3])
         self.assertEqual(split_args[4], 150)
+        self.assertIsInstance(split_args[5], Path)
 
         self.assertEqual(mock_run_verifier.call_count, 4)
         verifier_labels = [call.args[4] for call in mock_run_verifier.call_args_list]
@@ -99,17 +151,20 @@ class TestMainOrchestration(unittest.TestCase):
         self.assertEqual(path_args[2], Path('logs/initial.csv'))
         self.assertEqual(path_args[3], 'D:/')
         self.assertTrue(path_args[4])
+        self.assertIsInstance(path_args[5], Path)
 
         convert_args = mock_run_converter.call_args.args
         self.assertEqual(convert_args[2], 'D:/')
         self.assertTrue(convert_args[3])
         self.assertTrue(convert_args[4])
         self.assertTrue(convert_args[5])
+        self.assertIsInstance(convert_args[6], Path)
 
         id3_args = mock_run_id3_fixer.call_args.args
         self.assertEqual(id3_args[2], Path('logs/post_convert.csv'))
         self.assertEqual(id3_args[3], 'D:/')
         self.assertTrue(id3_args[4])
+        self.assertIsInstance(id3_args[5], Path)
 
     @patch('volvo_pipeline.run_id3_fixer')
     @patch('volvo_pipeline.run_converter')

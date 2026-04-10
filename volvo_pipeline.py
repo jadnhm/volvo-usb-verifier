@@ -24,7 +24,13 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional, Set
+from typing import Dict, Optional, Set
+
+from lib.logging_utils import create_run_output_dir
+
+
+VERIFIER_EXIT_ISSUES_FOUND = 1
+VERIFIER_EXIT_FATAL = 2
 
 
 def load_config(config_path: Path) -> dict:
@@ -81,9 +87,9 @@ def check_ffmpeg():
     sys.exit(1)
 
 
-def run_cleaner(python_cmd: str, script_dir: Path, drive_path: str, apply_changes: bool):
+def run_cleaner(python_cmd: str, script_dir: Path, drive_path: str, apply_changes: bool, log_dir: Path):
     """Run junk-file cleaner as an optional pre-step."""
-    command = [python_cmd, str(script_dir / 'lib' / 'volvo_usb_cleaner.py'), drive_path]
+    command = [python_cmd, str(script_dir / 'lib' / 'volvo_usb_cleaner.py'), drive_path, '--logs-dir', str(log_dir)]
     if apply_changes:
         command.append('--apply')
     run_step(command, 'Step 0: Clean junk files')
@@ -92,15 +98,15 @@ def run_cleaner(python_cmd: str, script_dir: Path, drive_path: str, apply_change
 def run_folder_splitter(python_cmd: str, script_dir: Path, drive_path: str,
                         apply_changes: bool, group_size: int, log_dir: Path) -> Path:
     """Run folder splitter and return the newest manifest it produced."""
-    command = [python_cmd, str(script_dir / 'lib' / 'volvo_folder_splitter.py'), drive_path]
+    command = [python_cmd, str(script_dir / 'lib' / 'volvo_folder_splitter.py'), drive_path, '--logs-dir', str(log_dir)]
+    previous_mtimes = {path: path.stat().st_mtime_ns for path in log_dir.glob('volvo_split_manifest*.csv')}
     if apply_changes:
         command.append('--apply')
     if group_size:
         command.extend(['--group-size', str(group_size)])
 
-    before = max((path.stat().st_mtime for path in log_dir.glob('volvo_split_manifest_*.csv')), default=0.0)
     run_step(command, 'Step 0.5: Split overcrowded folders')
-    return newest_matching_file(log_dir, 'volvo_split_manifest_*.csv', since_mtime=before)
+    return newest_matching_file(log_dir, 'volvo_split_manifest*.csv', previous_mtimes=previous_mtimes)
 
 
 def run_step(command, label: str, allowed_exit_codes: Optional[Set[int]] = None):
@@ -115,13 +121,20 @@ def run_step(command, label: str, allowed_exit_codes: Optional[Set[int]] = None)
     if result.returncode not in allowed_exit_codes:
         print(f"\nERROR: Step failed with exit code {result.returncode}")
         sys.exit(result.returncode)
+    return result.returncode
 
 
-def newest_matching_file(log_dir: Path, pattern: str, since_mtime: Optional[float] = None) -> Path:
-    """Return the newest file matching the pattern, optionally filtered by modified time."""
+def newest_matching_file(log_dir: Path, pattern: str, since_mtime: Optional[float] = None,
+                         previous_mtimes: Optional[Dict[Path, int]] = None) -> Path:
+    """Return the newest file matching the pattern, optionally filtered to fresh outputs."""
     candidates = sorted(log_dir.glob(pattern), key=lambda path: path.stat().st_mtime)
     if since_mtime is not None:
         candidates = [path for path in candidates if path.stat().st_mtime >= since_mtime]
+    if previous_mtimes is not None:
+        candidates = [
+            path for path in candidates
+            if path not in previous_mtimes or path.stat().st_mtime_ns > previous_mtimes[path]
+        ]
 
     if not candidates:
         raise FileNotFoundError(f"No files found for pattern: {pattern}")
@@ -131,32 +144,37 @@ def newest_matching_file(log_dir: Path, pattern: str, since_mtime: Optional[floa
 
 def run_verifier(python_cmd: str, script_dir: Path, drive_path: str, log_dir: Path, label: str) -> Path:
     """Run verifier and return the newest CSV it produced."""
-    before = max((path.stat().st_mtime for path in log_dir.glob('volvo_verify_*.csv')), default=0.0)
+    previous_mtimes = {path: path.stat().st_mtime_ns for path in log_dir.glob('volvo_verify_*.csv')}
     run_step(
-        [python_cmd, str(script_dir / 'lib' / 'volvo_usb_verifier.py'), drive_path],
+        [python_cmd, str(script_dir / 'lib' / 'volvo_usb_verifier.py'), drive_path, '--logs-dir', str(log_dir)],
         label,
-        allowed_exit_codes={0, 1},
+        allowed_exit_codes={0, VERIFIER_EXIT_ISSUES_FOUND},
     )
-    return newest_matching_file(log_dir, 'volvo_verify_*.csv', since_mtime=before)
+    try:
+        return newest_matching_file(log_dir, 'volvo_verify_*.csv', previous_mtimes=previous_mtimes)
+    except FileNotFoundError:
+        print("\nERROR: Verifier did not produce a fresh CSV report. Refusing to continue with a stale report.")
+        sys.exit(VERIFIER_EXIT_FATAL)
 
 
 def run_path_fixer(python_cmd: str, script_dir: Path, csv_file: Path, drive_path: str,
                    apply_changes: bool, log_dir: Path) -> Path:
     """Run path fixer and return the newest manifest it produced."""
-    command = [python_cmd, str(script_dir / 'lib' / 'volvo_path_fixer.py'), str(csv_file), drive_path]
+    command = [python_cmd, str(script_dir / 'lib' / 'volvo_path_fixer.py'), str(csv_file), drive_path, '--logs-dir', str(log_dir)]
+    previous_mtimes = {path: path.stat().st_mtime_ns for path in log_dir.glob('volvo_path_manifest*.csv')}
     if apply_changes:
         command.append('--apply')
 
-    before = max((path.stat().st_mtime for path in log_dir.glob('volvo_path_manifest_*.csv')), default=0.0)
     run_step(command, 'Step 2: Run path fixer')
-    return newest_matching_file(log_dir, 'volvo_path_manifest_*.csv', since_mtime=before)
+    return newest_matching_file(log_dir, 'volvo_path_manifest*.csv', previous_mtimes=previous_mtimes)
 
 
 def run_converter(python_cmd: str, script_dir: Path, drive_path: str,
                   apply_changes: bool, keep_originals: bool, resume: bool,
                   log_dir: Path) -> Path:
     """Run lossless converter and return the newest manifest it produced."""
-    command = [python_cmd, str(script_dir / 'lib' / 'volvo_converter.py'), drive_path]
+    command = [python_cmd, str(script_dir / 'lib' / 'volvo_converter.py'), drive_path, '--logs-dir', str(log_dir)]
+    previous_mtimes = {path: path.stat().st_mtime_ns for path in log_dir.glob('volvo_convert_manifest*.csv')}
     if apply_changes:
         command.append('--apply')
     if keep_originals:
@@ -164,19 +182,23 @@ def run_converter(python_cmd: str, script_dir: Path, drive_path: str,
     if resume:
         command.append('--resume')
 
-    before = max((path.stat().st_mtime for path in log_dir.glob('volvo_convert_manifest_*.csv')), default=0.0)
     run_step(command, 'Step 4: Convert lossless files to AAC M4A')
-    return newest_matching_file(log_dir, 'volvo_convert_manifest_*.csv', since_mtime=before)
+    return newest_matching_file(log_dir, 'volvo_convert_manifest*.csv', previous_mtimes=previous_mtimes)
 
 
 def run_id3_fixer(python_cmd: str, script_dir: Path, csv_file: Path, drive_path: str,
-                  apply_changes: bool):
+                  apply_changes: bool, log_dir: Path):
     """Run ID3 fixer against a verifier CSV."""
-    command = [python_cmd, str(script_dir / 'lib' / 'volvo_usb_fixer.py'), str(csv_file), drive_path]
+    command = [python_cmd, str(script_dir / 'lib' / 'volvo_usb_fixer.py'), str(csv_file), drive_path, '--logs-dir', str(log_dir)]
     if apply_changes:
         command.append('--apply')
 
     run_step(command, 'Step 6: Run ID3 fixer')
+
+
+def create_step_output_dir(run_dir: Path, step_name: str) -> Path:
+    """Create a timestamped per-step artifact directory inside a pipeline run."""
+    return create_run_output_dir(run_dir, step_name)
 
 
 def main():
@@ -241,12 +263,20 @@ Examples:
         parser.error('--resume-convert cannot be used with --skip-convert')
 
     script_dir = Path(__file__).resolve().parent
-    log_dir = script_dir / 'logs'
-    log_dir.mkdir(exist_ok=True)
+    log_root = script_dir / 'logs'
+    log_root.mkdir(exist_ok=True)
+    pipeline_run_dir = create_run_output_dir(log_root, 'volvo_pipeline')
+    print(f"Pipeline artifacts: {pipeline_run_dir}")
 
     python_cmd = sys.executable
 
-    run_cleaner(python_cmd, script_dir, args.drive_path, args.apply_clean)
+    run_cleaner(
+        python_cmd,
+        script_dir,
+        args.drive_path,
+        args.apply_clean,
+        create_step_output_dir(pipeline_run_dir, '00_cleaner'),
+    )
 
     if args.run_split or args.apply_split:
         split_manifest = run_folder_splitter(
@@ -255,11 +285,17 @@ Examples:
             args.drive_path,
             args.apply_split,
             args.split_group_size,
-            log_dir,
+            create_step_output_dir(pipeline_run_dir, '00_folder_splitter'),
         )
         print(f"Split manifest: {split_manifest}")
 
-    initial_csv = run_verifier(python_cmd, script_dir, args.drive_path, log_dir, 'Step 1: Verify drive state')
+    initial_csv = run_verifier(
+        python_cmd,
+        script_dir,
+        args.drive_path,
+        create_step_output_dir(pipeline_run_dir, '01_verify_initial'),
+        'Step 1: Verify drive state',
+    )
     print(f"Verifier CSV: {initial_csv}")
 
     manifest_file = run_path_fixer(
@@ -268,11 +304,17 @@ Examples:
         initial_csv,
         args.drive_path,
         args.apply_path,
-        log_dir,
+        create_step_output_dir(pipeline_run_dir, '02_path_fixer'),
     )
     print(f"Path manifest: {manifest_file}")
 
-    refreshed_csv = run_verifier(python_cmd, script_dir, args.drive_path, log_dir, 'Step 3: Re-verify after path fixer')
+    refreshed_csv = run_verifier(
+        python_cmd,
+        script_dir,
+        args.drive_path,
+        create_step_output_dir(pipeline_run_dir, '03_verify_post_path'),
+        'Step 3: Re-verify after path fixer',
+    )
     print(f"Post-path-fix verifier CSV: {refreshed_csv}")
 
     id3_input_csv = refreshed_csv
@@ -286,7 +328,7 @@ Examples:
             args.apply_convert,
             args.keep_originals_convert,
             args.resume_convert,
-            log_dir,
+            create_step_output_dir(pipeline_run_dir, '04_converter'),
         )
         print(f"Conversion manifest: {convert_manifest}")
 
@@ -294,7 +336,7 @@ Examples:
             python_cmd,
             script_dir,
             args.drive_path,
-            log_dir,
+            create_step_output_dir(pipeline_run_dir, '05_verify_post_convert'),
             'Step 5: Re-verify after lossless conversion',
         )
         print(f"Post-conversion verifier CSV: {post_convert_csv}")
@@ -302,9 +344,22 @@ Examples:
     else:
         print("Conversion step skipped (--skip-convert).")
 
-    run_id3_fixer(python_cmd, script_dir, id3_input_csv, args.drive_path, args.apply_id3)
+    run_id3_fixer(
+        python_cmd,
+        script_dir,
+        id3_input_csv,
+        args.drive_path,
+        args.apply_id3,
+        create_step_output_dir(pipeline_run_dir, '06_id3_fixer'),
+    )
 
-    final_csv = run_verifier(python_cmd, script_dir, args.drive_path, log_dir, 'Step 7: Final verification')
+    final_csv = run_verifier(
+        python_cmd,
+        script_dir,
+        args.drive_path,
+        create_step_output_dir(pipeline_run_dir, '07_verify_final'),
+        'Step 7: Final verification',
+    )
     print(f"Final verifier CSV: {final_csv}")
     print("\nPipeline complete.")
 

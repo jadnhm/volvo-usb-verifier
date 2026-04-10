@@ -32,7 +32,12 @@ import shutil
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
+
+try:
+    from logging_utils import configure_file_logger, resolve_run_output_dir
+except ImportError:
+    from lib.logging_utils import configure_file_logger, resolve_run_output_dir
 
 # Fix Windows console encoding
 if sys.platform == "win32":
@@ -228,18 +233,10 @@ class VolvoUSBCleaner:
 # Logging setup & entry point
 # ---------------------------------------------------------------------------
 
-def setup_logging() -> str:
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = log_dir / f"volvo_cleaner_{timestamp}.log"
-
-    logger = logging.getLogger('VolvoUSBCleaner')
-    logger.setLevel(logging.INFO)
-    fh = logging.FileHandler(log_file, encoding='utf-8')
-    fh.setLevel(logging.INFO)
-    fh.setFormatter(logging.Formatter('%(message)s'))
-    logger.addHandler(fh)
+def setup_logging(logs_dir: Optional[str] = None) -> str:
+    run_dir = resolve_run_output_dir(logs_dir, 'volvo_usb_cleaner')
+    log_file = run_dir / 'volvo_usb_cleaner.log'
+    configure_file_logger('VolvoUSBCleaner', log_file)
 
     return str(log_file)
 
@@ -270,13 +267,14 @@ WARNING: --apply permanently deletes files. Review dry-run output first!
     parser.add_argument('drive_path', help='Path to USB drive or media folder')
     parser.add_argument('--apply', action='store_true',
                         help='Delete junk files (default is dry run)')
+    parser.add_argument('--logs-dir', help='Directory to write this run\'s log artifact into')
     args = parser.parse_args()
 
     if not os.path.exists(args.drive_path):
         print(f"ERROR: Path not found: {args.drive_path}")
         sys.exit(1)
 
-    log_file = setup_logging()
+    log_file = setup_logging(logs_dir=args.logs_dir)
     print(f"Logging to: {log_file}\n")
 
     cleaner = VolvoUSBCleaner(args.drive_path, dry_run=not args.apply)

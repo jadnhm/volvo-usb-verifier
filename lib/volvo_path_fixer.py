@@ -29,6 +29,11 @@ from typing import Dict, List, Tuple, Optional, Set
 from collections import defaultdict
 import re
 
+try:
+    from logging_utils import configure_file_logger, resolve_run_output_dir
+except ImportError:
+    from lib.logging_utils import configure_file_logger, resolve_run_output_dir
+
 # Fix Windows console encoding issues
 if sys.platform == "win32":
     import io
@@ -649,24 +654,12 @@ class VolvoPathFixer:
         self.log(f"{'='*70}")
 
 
-def setup_logging() -> Tuple[str, str]:
+def setup_logging(logs_dir: Optional[str] = None) -> Tuple[str, str]:
     """Set up output files for logging and rename manifest."""
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = log_dir / f"volvo_path_fixer_{timestamp}.log"
-    manifest_file = log_dir / f"volvo_path_manifest_{timestamp}.csv"
-
-    logger = logging.getLogger('VolvoPathFixer')
-    logger.setLevel(logging.INFO)
-
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
-    file_handler.setLevel(logging.INFO)
-    file_formatter = logging.Formatter('%(message)s')
-    file_handler.setFormatter(file_formatter)
-
-    logger.addHandler(file_handler)
+    run_dir = resolve_run_output_dir(logs_dir, 'volvo_path_fixer')
+    log_file = run_dir / 'volvo_path_fixer.log'
+    manifest_file = run_dir / 'volvo_path_manifest.csv'
+    configure_file_logger('VolvoPathFixer', log_file)
 
     return str(log_file), str(manifest_file)
 
@@ -700,6 +693,7 @@ WARNING: Always backup your files before running with --apply!
                        help='Apply fixes (default is dry run)')
     parser.add_argument('--sample', type=int, metavar='N',
                        help='Randomly process only N files from the issue list (useful for dry-run spot checks)')
+    parser.add_argument('--logs-dir', help='Directory to write this run\'s log and manifest artifacts into')
 
     args = parser.parse_args()
 
@@ -713,7 +707,7 @@ WARNING: Always backup your files before running with --apply!
         sys.exit(1)
 
     # Set up logging
-    log_file, manifest_file = setup_logging()
+    log_file, manifest_file = setup_logging(logs_dir=args.logs_dir)
     print(f"Logging to: {log_file}\n")
     print(f"Rename manifest will be saved to: {manifest_file}\n")
 

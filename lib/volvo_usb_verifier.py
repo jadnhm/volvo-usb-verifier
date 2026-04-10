@@ -35,6 +35,11 @@ from typing import Dict, List, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing
 
+try:
+    from logging_utils import configure_file_logger, resolve_run_output_dir
+except ImportError:
+    from lib.logging_utils import configure_file_logger, resolve_run_output_dir
+
 # Fix Windows console encoding issues
 if platform.system() == "Windows":
     import io
@@ -55,6 +60,11 @@ except ImportError:
     print("ERROR: This script requires the 'mutagen' library.")
     print("Install it with: pip install mutagen")
     sys.exit(1)
+
+
+EXIT_SUCCESS = 0
+EXIT_ISSUES_FOUND = 1
+EXIT_FATAL = 2
 
 
 class VolvoUSBVerifier:
@@ -894,30 +904,13 @@ class VolvoUSBVerifier:
         self.log("=" * 70)
 
 
-def setup_logging(drive_path: str) -> Tuple[str, str]:
+def setup_logging(drive_path: str, logs_dir: Optional[str] = None) -> Tuple[str, str]:
     """Set up logging to both console and timestamped file. Returns (log_file, csv_file)."""
-    # Create logs directory if it doesn't exist
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
-
-    # Create timestamped log filename
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_dir = resolve_run_output_dir(logs_dir, 'volvo_verify')
     drive_name = Path(drive_path).name or "drive"
-    log_file = log_dir / f"volvo_verify_{drive_name}_{timestamp}.log"
-    csv_file = log_dir / f"volvo_verify_{drive_name}_{timestamp}.csv"
-
-    # Configure logging
-    logger = logging.getLogger('VolvoUSBVerifier')
-    logger.setLevel(logging.INFO)
-
-    # File handler
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
-    file_handler.setLevel(logging.INFO)
-    file_formatter = logging.Formatter('%(message)s')
-    file_handler.setFormatter(file_formatter)
-
-    # Add handlers
-    logger.addHandler(file_handler)
+    log_file = run_dir / f"volvo_verify_{drive_name}.log"
+    csv_file = run_dir / f"volvo_verify_{drive_name}.csv"
+    configure_file_logger('VolvoUSBVerifier', log_file)
 
     return str(log_file), str(csv_file)
 
@@ -933,7 +926,14 @@ def main():
         print("  macOS:   python volvo_usb_verifier.py /Volumes/USB_DRIVE")
         sys.exit(1)
 
-    drive_path = sys.argv[1]
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Verify Volvo USB media compatibility.')
+    parser.add_argument('drive_path', help='Path to USB drive or media folder')
+    parser.add_argument('--logs-dir', help='Directory to write this run\'s log and CSV artifacts into')
+    args = parser.parse_args()
+
+    drive_path = args.drive_path
 
     if not os.path.exists(drive_path):
         print(f"ERROR: Path does not exist: {drive_path}")
@@ -943,18 +943,22 @@ def main():
         print(f"ERROR: Path is not a directory: {drive_path}")
         sys.exit(1)
 
-    # Set up logging
-    log_file, csv_file = setup_logging(drive_path)
-    print(f"Logging to: {log_file}\n")
+    try:
+        log_file, csv_file = setup_logging(drive_path, logs_dir=args.logs_dir)
+        print(f"Logging to: {log_file}\n")
 
-    verifier = VolvoUSBVerifier(drive_path)
-    verifier.csv_file = csv_file
-    success = verifier.verify_all()
+        verifier = VolvoUSBVerifier(drive_path)
+        verifier.csv_file = csv_file
+        success = verifier.verify_all()
+    except Exception as exc:
+        logging.getLogger('VolvoUSBVerifier').exception("Fatal verifier error")
+        print(f"ERROR: Verifier failed unexpectedly: {exc}", file=sys.stderr)
+        sys.exit(EXIT_FATAL)
 
     print(f"\nLog file saved to: {log_file}")
     print(f"CSV report saved to: {csv_file}")
 
-    sys.exit(0 if success else 1)
+    sys.exit(EXIT_SUCCESS if success else EXIT_ISSUES_FOUND)
 
 
 if __name__ == "__main__":

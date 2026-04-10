@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import lib.volvo_usb_verifier as verifier_module
 from lib.volvo_usb_verifier import VolvoUSBVerifier
 
 
@@ -300,6 +301,19 @@ class TestVerifyAllCsvBehavior(unittest.TestCase):
             content = csv_path.read_text(encoding='utf-8').splitlines()
             self.assertEqual(content[0], 'file_path,issue_type,severity,description')
             self.assertEqual(len(content), 1)
+
+
+class TestVerifierCliBehavior(unittest.TestCase):
+
+    @patch('lib.volvo_usb_verifier.VolvoUSBVerifier.verify_all', side_effect=RuntimeError('boom'))
+    @patch('lib.volvo_usb_verifier.setup_logging', return_value=('logs/test.log', 'logs/test.csv'))
+    def test_main_uses_distinct_fatal_exit_code_on_unexpected_error(self, _mock_setup, _mock_verify_all):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(sys, 'argv', ['volvo_usb_verifier.py', tmp]):
+                with self.assertRaises(SystemExit) as ctx:
+                    verifier_module.main()
+
+        self.assertEqual(ctx.exception.code, verifier_module.EXIT_FATAL)
 
 
 class TestWindowsFilesystemHelpers(unittest.TestCase):

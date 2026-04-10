@@ -40,6 +40,11 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+try:
+    from logging_utils import configure_file_logger, resolve_run_output_dir
+except ImportError:
+    from lib.logging_utils import configure_file_logger, resolve_run_output_dir
 from collections import defaultdict
 
 # Fix Windows console encoding
@@ -349,20 +354,11 @@ class VolvoConverter:
 # Logging setup
 # ---------------------------------------------------------------------------
 
-def setup_logging() -> Tuple[str, str]:
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = log_dir / f"volvo_converter_{timestamp}.log"
-    manifest_file = log_dir / f"volvo_convert_manifest_{timestamp}.csv"
-
-    logger = logging.getLogger('VolvoConverter')
-    logger.setLevel(logging.INFO)
-    fh = logging.FileHandler(log_file, encoding='utf-8')
-    fh.setLevel(logging.INFO)
-    fh.setFormatter(logging.Formatter('%(message)s'))
-    logger.addHandler(fh)
+def setup_logging(logs_dir: Optional[str] = None) -> Tuple[str, str]:
+    run_dir = resolve_run_output_dir(logs_dir, 'volvo_converter')
+    log_file = run_dir / 'volvo_converter.log'
+    manifest_file = run_dir / 'volvo_convert_manifest.csv'
+    configure_file_logger('VolvoConverter', log_file)
 
     return str(log_file), str(manifest_file)
 
@@ -406,13 +402,14 @@ WARNING: Always backup your files before running with --apply!
     parser.add_argument('--resume', action='store_true',
                         help='Skip files whose .m4a output already exists '
                              '(useful after an interrupted run)')
+    parser.add_argument('--logs-dir', help='Directory to write this run\'s log and manifest artifacts into')
     args = parser.parse_args()
 
     if not os.path.exists(args.drive_path):
         print(f"ERROR: Path not found: {args.drive_path}")
         sys.exit(1)
 
-    log_file, manifest_file = setup_logging()
+    log_file, manifest_file = setup_logging(logs_dir=args.logs_dir)
     print(f"Logging to: {log_file}")
     print(f"Conversion manifest will be saved to: {manifest_file}\n")
 

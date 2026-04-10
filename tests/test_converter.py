@@ -144,7 +144,8 @@ class TestResumeSkip(unittest.TestCase):
         # Simulate already-converted output existing
         (self.base / 'song.m4a').write_bytes(b'output')
 
-        log_file, manifest_file = setup_logging()
+        logs_dir = self.base / 'artifacts'
+        log_file, manifest_file = setup_logging(logs_dir=str(logs_dir))
         converter = VolvoConverter(
             str(self.base),
             dry_run=False,
@@ -157,6 +158,13 @@ class TestResumeSkip(unittest.TestCase):
         skipped = [r for r in converter.manifest_rows
                    if r['status'] == 'skipped_already_converted']
         self.assertEqual(len(skipped), 1, "Expected file to be skipped in resume mode")
+        self.assertEqual(Path(log_file).parent, logs_dir)
+        self.assertEqual(Path(manifest_file).parent, logs_dir)
+
+        logger = logging.getLogger('VolvoConverter')
+        for handler in list(logger.handlers):
+            handler.close()
+            logger.removeHandler(handler)
 
         # Original .flac should still exist (we didn't convert)
         self.assertTrue(flac.exists())

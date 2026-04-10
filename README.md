@@ -111,7 +111,7 @@ pytest tests/ -q
 - `lib/`: helper scripts used by the pipeline and tests
 - `lib/audiobooks/`: audiobook-specific helper scripts
 - `tests/`: pytest suite
-- `logs/`: generated verifier, fixer, converter, cleaner, and splitter outputs
+- `logs/`: generated per-run artifact directories for verifier, fixer, converter, cleaner, splitter, and pipeline runs
 
 ## The Scripts
 
@@ -141,8 +141,9 @@ python lib/volvo_usb_verifier.py /path/to/usb
 ```
 
 **Output Files**:
-- `logs/volvo_verify_drive_YYYYMMDD_HHMMSS.log` - Human-readable report
-- `logs/volvo_verify_drive_YYYYMMDD_HHMMSS.csv` - Machine-readable issue list
+- `logs/volvo_verify_YYYYMMDD_HHMMSS_microseconds/volvo_verify_drive.log` - Human-readable report
+- `logs/volvo_verify_YYYYMMDD_HHMMSS_microseconds/volvo_verify_drive.csv` - Machine-readable issue list
+- Optional: pass `--logs-dir PATH` to place the run artifacts in a specific directory
 
 **CSV Format**:
 ```csv
@@ -179,15 +180,15 @@ music\song.mp3,ID3 Tags,WARNING,ID3v2.4 (ID3v2.3 recommended)
 
 **Workflow Note**: This script uses the exact `file_path` values from the verifier CSV. If you have already applied renames with `volvo_path_fixer.py`, re-run the verifier first and use the fresh CSV here.
 
-**Stale Input Warning**: The fixer now warns when it sees a newer `logs/volvo_path_manifest_*.csv` than the verifier CSV you passed in.
+**Stale Input Warning**: The fixer now warns when it sees a newer `volvo_path_manifest.csv` in a more recent run directory than the verifier CSV you passed in.
 
 **Usage**:
 ```bash
 # Dry run (preview changes)
-python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
+python lib/volvo_usb_fixer.py logs/volvo_verify_20260103_162933_123456/volvo_verify_drive.csv D:/
 
 # Apply changes
-python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
+python lib/volvo_usb_fixer.py logs/volvo_verify_20260103_162933_123456/volvo_verify_drive.csv D:/ --apply
 ```
 
 **Output Example**:
@@ -248,15 +249,16 @@ python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --
 **Input**: CSV file from `volvo_usb_verifier.py`
 
 **Additional Output**:
-- `logs/volvo_path_manifest_YYYYMMDD_HHMMSS.csv` - Rename manifest showing original path, new path, status, warnings, and errors
+- `logs/volvo_path_fixer_YYYYMMDD_HHMMSS_microseconds/volvo_path_manifest.csv` - Rename manifest showing original path, new path, status, warnings, and errors
+- Optional: pass `--logs-dir PATH` to place the run artifacts in a specific directory
 
 **Usage**:
 ```bash
 # Dry run (preview changes)
-python lib/volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
+python lib/volvo_path_fixer.py logs/volvo_verify_20260103_162933_123456/volvo_verify_drive.csv D:/
 
 # Apply changes
-python lib/volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
+python lib/volvo_path_fixer.py logs/volvo_verify_20260103_162933_123456/volvo_verify_drive.csv D:/ --apply
 ```
 
 **Output Example**:
@@ -306,7 +308,8 @@ python lib/volvo_usb_cleaner.py D:/ --apply
 
 **Key Behavior**:
 - Dry-run by default
-- Writes `logs/volvo_convert_manifest_YYYYMMDD_HHMMSS.csv`
+- Writes `logs/volvo_converter_YYYYMMDD_HHMMSS_microseconds/volvo_convert_manifest.csv`
+- Optional: pass `--logs-dir PATH` to place the run artifacts in a specific directory
 - `--resume` skips files whose expected `.m4a` output already exists from a previous interrupted run
 - `--keep-originals` preserves the source lossless file after successful conversion
 
@@ -336,7 +339,8 @@ python lib/volvo_converter.py D:/ --apply --resume
 - Dry-run by default
 - Groups files into numbered alphabetical subfolders
 - Default target is 200 files per subfolder, leaving headroom below the hard limit
-- Writes `logs/volvo_split_manifest_YYYYMMDD_HHMMSS.csv`
+- Writes `logs/volvo_folder_splitter_YYYYMMDD_HHMMSS_microseconds/volvo_split_manifest.csv`
+- Optional: pass `--logs-dir PATH` to place the run artifacts in a specific directory
 
 **Usage**:
 ```bash
@@ -355,6 +359,11 @@ python lib/volvo_folder_splitter.py D:/ --apply
 
 **Workflow**:
 `clean -> verify -> path fix -> verify -> convert -> verify -> ID3 fix -> verify`
+
+**Pipeline Artifacts**:
+- Each pipeline run creates one parent directory under `logs/`, for example `logs/volvo_pipeline_YYYYMMDD_HHMMSS_microseconds/`
+- Each step writes its own log and manifest/CSV files into a timestamped subfolder inside that run directory
+- This keeps one pipeline run's artifacts grouped together and prevents later steps from accidentally reusing stale reports
 
 **Flag reference**:
 
@@ -452,8 +461,9 @@ python lib/volvo_usb_verifier.py /path/to/usb
 ```
 
 **Output Files Generated**:
-- `logs/volvo_verify_drive_YYYYMMDD_HHMMSS.log` - Full text report (automatically saved)
-- `logs/volvo_verify_drive_YYYYMMDD_HHMMSS.csv` - Issue list for fixer scripts
+- `logs/volvo_verify_YYYYMMDD_HHMMSS_microseconds/volvo_verify_drive.log` - Full text report (automatically saved)
+- `logs/volvo_verify_YYYYMMDD_HHMMSS_microseconds/volvo_verify_drive.csv` - Issue list for fixer scripts
+- Optional: pass `--logs-dir PATH` to place the run artifacts in a specific directory
 
 Review the log files to understand all issues found.
 
@@ -467,22 +477,22 @@ Review the log files to understand all issues found.
 **Basic Usage**:
 ```bash
 # Dry run first
-python lib/volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
+python lib/volvo_path_fixer.py logs/volvo_verify_20260103_162933_123456/volvo_verify_drive.csv D:/
 
 # Review output, then apply if acceptable
-python lib/volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
+python lib/volvo_path_fixer.py logs/volvo_verify_20260103_162933_123456/volvo_verify_drive.csv D:/ --apply
 ```
 
 **Save Console Output**:
 
 Windows (PowerShell):
 ```powershell
-python lib/volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ | Tee-Object -FilePath "path_fixer_output.txt"
+python lib/volvo_path_fixer.py logs/volvo_verify_20260103_162933_123456/volvo_verify_drive.csv D:/ | Tee-Object -FilePath "path_fixer_output.txt"
 ```
 
 Linux/macOS:
 ```bash
-python lib/volvo_path_fixer.py logs/volvo_verify_drive_20260103_162933.csv /path/to/usb 2>&1 | tee path_fixer_output.txt
+python lib/volvo_path_fixer.py logs/volvo_verify_20260103_162933_123456/volvo_verify_drive.csv /path/to/usb 2>&1 | tee path_fixer_output.txt
 ```
 
 **What It Does**:
@@ -507,22 +517,22 @@ Use the fresh CSV from this second scan when running the ID3 fixer.
 **Basic Usage**:
 ```bash
 # Dry run first
-python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/
+python lib/volvo_usb_fixer.py logs/volvo_verify_20260103_162933_123456/volvo_verify_drive.csv D:/
 
 # Review output, then apply if acceptable
-python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ --apply
+python lib/volvo_usb_fixer.py logs/volvo_verify_20260103_162933_123456/volvo_verify_drive.csv D:/ --apply
 ```
 
 **Save Console Output**:
 
 Windows (PowerShell):
 ```powershell
-python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv D:/ | Tee-Object -FilePath "id3_fixer_output.txt"
+python lib/volvo_usb_fixer.py logs/volvo_verify_20260103_162933_123456/volvo_verify_drive.csv D:/ | Tee-Object -FilePath "id3_fixer_output.txt"
 ```
 
 Linux/macOS:
 ```bash
-python lib/volvo_usb_fixer.py logs/volvo_verify_drive_20260103_162933.csv /path/to/usb 2>&1 | tee id3_fixer_output.txt
+python lib/volvo_usb_fixer.py logs/volvo_verify_20260103_162933_123456/volvo_verify_drive.csv /path/to/usb 2>&1 | tee id3_fixer_output.txt
 ```
 
 **What It Does**:
@@ -611,13 +621,17 @@ All scripts work on Windows, Linux, and macOS:
 
 ### Logging
 
-All scripts automatically generate timestamped log files in `logs/` directory:
+All scripts automatically generate timestamped run directories in `logs/`:
 
 **Automatic Log Files**:
-- All scripts save output to `logs/` automatically (no user action needed)
-- Verifier: `logs/volvo_verify_drive_YYYYMMDD_HHMMSS.log` + `.csv`
-- ID3 Fixer: `logs/volvo_fixer_YYYYMMDD_HHMMSS.log`
-- Path Fixer: `logs/volvo_path_fixer_YYYYMMDD_HHMMSS.log`
+- All scripts save output to `logs/` automatically inside one directory per run (no user action needed)
+- Verifier: `logs/volvo_verify_YYYYMMDD_HHMMSS_microseconds/volvo_verify_drive.log` + `.csv`
+- ID3 Fixer: `logs/volvo_usb_fixer_YYYYMMDD_HHMMSS_microseconds/volvo_usb_fixer.log`
+- Path Fixer: `logs/volvo_path_fixer_YYYYMMDD_HHMMSS_microseconds/volvo_path_fixer.log`
+- Converter: `logs/volvo_converter_YYYYMMDD_HHMMSS_microseconds/volvo_converter.log` + `volvo_convert_manifest.csv`
+- Folder Splitter: `logs/volvo_folder_splitter_YYYYMMDD_HHMMSS_microseconds/volvo_folder_splitter.log` + `volvo_split_manifest.csv`
+- Pipeline: `logs/volvo_pipeline_YYYYMMDD_HHMMSS_microseconds/` with one subfolder per step
+- Use `--logs-dir PATH` with standalone tools when you want artifacts written to a specific directory instead
 
 **Console Output**:
 - Real-time progress shown on screen
