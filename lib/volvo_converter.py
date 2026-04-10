@@ -153,6 +153,30 @@ def run_ffmpeg(ffmpeg_path: str, input_path: Path, output_path: Path, timeout: i
         return False, f"Unexpected error: {exc}"
 
 
+def validate_converted_output(output_path: Path) -> Tuple[bool, str]:
+    """Verify a converted output exists and looks usable before deleting source."""
+    if not output_path.exists():
+        return False, "conversion reported success but output file was not created"
+
+    try:
+        size = output_path.stat().st_size
+    except OSError as exc:
+        return False, f"could not stat output file: {exc}"
+
+    if size <= 0:
+        return False, "conversion produced a zero-byte output file"
+
+    if _MUTAGEN_AVAILABLE:
+        try:
+            audio = MP4(output_path)
+            if not getattr(audio, 'info', None):
+                return False, "converted file could not be parsed as an MP4/AAC file"
+        except Exception as exc:
+            return False, f"converted file could not be parsed as an MP4/AAC file: {exc}"
+
+    return True, "output file verified"
+
+
 # ---------------------------------------------------------------------------
 # Main class
 # ---------------------------------------------------------------------------
@@ -237,6 +261,12 @@ class VolvoConverter:
 
             # — Live mode —
             success, message = run_ffmpeg(ffmpeg_path, input_path, output_path)
+
+            if success:
+                output_ok, output_message = validate_converted_output(output_path)
+                if not output_ok:
+                    success = False
+                    message = f"{message} but {output_message}"
 
             if success:
                 self.stats['converted'] += 1

@@ -307,6 +307,40 @@ class TestParentFolderShortening(unittest.TestCase):
         self.assertFalse(source.exists())
         self.assertEqual(fixer.stats['parent_dirs_shortened'], 1)
 
+    def test_parent_dir_rename_moves_unflagged_siblings_too(self):
+        flagged = self.base / 'Artist' / 'Album Name [320kbps CBR] @320' / '01 - Track.mp3'
+        sibling = self.base / 'Artist' / 'Album Name [320kbps CBR] @320' / 'cover.jpg'
+        flagged.parent.mkdir(parents=True, exist_ok=True)
+        flagged.write_bytes(b'source')
+        sibling.write_bytes(b'cover')
+
+        fixer = _make_fixer_with_base(self.base, dry_run=False)
+        fixer._process_file(
+            'Artist/Album Name [320kbps CBR] @320/01 - Track.mp3',
+            [{'issue_type': 'Path Length'}],
+        )
+
+        self.assertTrue((self.base / 'Artist' / 'Album Name' / '01 - Track.mp3').exists())
+        self.assertTrue((self.base / 'Artist' / 'Album Name' / 'cover.jpg').exists())
+        self.assertFalse((self.base / 'Artist' / 'Album Name [320kbps CBR] @320').exists())
+
+    def test_second_file_in_renamed_folder_uses_mapping(self):
+        first = self.base / 'Artist' / 'Album Name [320kbps CBR] @320' / '01 - Track.mp3'
+        second = self.base / 'Artist' / 'Album Name [320kbps CBR] @320' / '02 - Track.mp3'
+        first.parent.mkdir(parents=True, exist_ok=True)
+        first.write_bytes(b'one')
+        second.write_bytes(b'two')
+
+        fixer = _make_fixer_with_base(self.base, dry_run=False)
+        issues = [{'issue_type': 'Path Length'}]
+        fixer._process_file('Artist/Album Name [320kbps CBR] @320/01 - Track.mp3', issues)
+        fixer._process_file('Artist/Album Name [320kbps CBR] @320/02 - Track.mp3', issues)
+
+        self.assertTrue((self.base / 'Artist' / 'Album Name' / '01 - Track.mp3').exists())
+        self.assertTrue((self.base / 'Artist' / 'Album Name' / '02 - Track.mp3').exists())
+        self.assertEqual(fixer.stats['files_renamed'], 1)
+        self.assertEqual(fixer.failed_files, [])
+
 
 if __name__ == '__main__':
     unittest.main()

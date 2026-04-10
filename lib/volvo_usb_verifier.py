@@ -115,9 +115,8 @@ class VolvoUSBVerifier:
         # Print report
         self.print_report()
 
-        # Export CSV of problem files
-        if self.problem_files:
-            self.export_csv()
+        # Export CSV even on a clean run so downstream tools always have input.
+        self.export_csv()
 
         # Print elapsed time
         elapsed = datetime.now() - self.start_time
@@ -931,8 +930,7 @@ def main():
     success = verifier.verify_all()
 
     print(f"\nLog file saved to: {log_file}")
-    if verifier.problem_files:
-        print(f"CSV report saved to: {csv_file}")
+    print(f"CSV report saved to: {csv_file}")
 
     sys.exit(0 if success else 1)
 

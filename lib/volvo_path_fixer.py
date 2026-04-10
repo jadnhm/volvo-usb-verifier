@@ -22,6 +22,7 @@ import sys
 import csv
 import logging
 import random
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Set
@@ -185,7 +186,9 @@ class VolvoPathFixer:
 
     def _process_file(self, file_path: str, issues: List[Dict]):
         """Process a single file - fix what we can, report what we can't."""
-        full_path = self.drive_path / file_path
+        original_path = Path(file_path)
+        current_path = self._apply_known_dir_renames(original_path)
+        full_path = self.drive_path / current_path
 
         if not full_path.exists():
             self.failed_files.append((file_path, "File not found"))
@@ -205,7 +208,7 @@ class VolvoPathFixer:
         has_invalid_chars = any(i['issue_type'] == 'Invalid Characters' for i in issues)
 
         fixes_applied = []
-        new_path = Path(file_path)
+        new_path = current_path
 
         # Fix invalid characters first
         if has_invalid_chars:
@@ -231,7 +234,7 @@ class VolvoPathFixer:
 
         # Collision detection: if the computed target path already exists as a
         # *different* file, generate a safe unique name by appending _2, _3, etc.
-        if str(new_path) != file_path:
+        if str(new_path) != str(current_path):
             candidate = self.drive_path / new_path
             try:
                 same_file = candidate.exists() and candidate.resolve() == full_path.resolve()
@@ -266,7 +269,7 @@ class VolvoPathFixer:
         # Report on this file if there are any issues
         if fixes_applied:
             # Something to report (fixes or warnings)
-            if str(new_path) != file_path:
+            if str(new_path) != str(current_path):
                 # File will be renamed
                 if self.dry_run:
                     self.log(f"Would rename:")
@@ -286,9 +289,12 @@ class VolvoPathFixer:
                 else:
                     # Perform actual rename
                     try:
+                        current_path = self._apply_parent_dir_rename(current_path, new_path)
+                        full_path = self.drive_path / current_path
                         new_full_path = self.drive_path / new_path
-                        new_full_path.parent.mkdir(parents=True, exist_ok=True)
-                        full_path.rename(new_full_path)
+                        if current_path != new_path:
+                            new_full_path.parent.mkdir(parents=True, exist_ok=True)
+                            full_path.rename(new_full_path)
                         self.log(f"✓ Renamed: {file_path} -> {new_path}")
                         for fix in fixes_applied:
                             self.log(f"    - {fix}")
@@ -328,6 +334,38 @@ class VolvoPathFixer:
                     warnings=warning_messages,
                     error='',
                 )
+
+    def _apply_known_dir_renames(self, path_obj: Path) -> Path:
+        """Rewrite a path using previously-applied parent directory renames."""
+        for old_dir, new_dir in sorted(self.renamed_dirs.items(), key=lambda item: len(item[0].parts), reverse=True):
+            if path_obj.parts[:len(old_dir.parts)] == old_dir.parts:
+                suffix = path_obj.parts[len(old_dir.parts):]
+                return new_dir.joinpath(*suffix) if suffix else new_dir
+        return path_obj
+
+    def _apply_parent_dir_rename(self, current_path: Path, target_path: Path) -> Path:
+        """Rename a parent directory once so unaffected siblings move together."""
+        current_parent = current_path.parent
+        target_parent = target_path.parent
+
+        if current_parent == target_parent:
+            return current_path
+
+        old_full = self.drive_path / current_parent
+        new_full = self.drive_path / target_parent
+
+        if not old_full.exists():
+            return target_path
+
+        if new_full.exists() and new_full.resolve() != old_full.resolve():
+            raise FileExistsError(
+                f"Target directory already exists: {target_parent}. Refusing to split or merge folders automatically."
+            )
+
+        new_full.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(old_full), str(new_full))
+        self.renamed_dirs[current_parent] = target_parent
+        return target_parent / current_path.name
 
     def _record_manifest(self, original_path: str, new_path: str, status: str,
                          actions: List[str], warnings: List[str], error: str):

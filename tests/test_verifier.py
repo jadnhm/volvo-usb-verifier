@@ -6,9 +6,10 @@ and unsupported format detection.
 """
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -163,6 +164,35 @@ class TestProblemFilesTracking(unittest.TestCase):
         path_issues = [p for p in self.verifier.problem_files
                        if p['issue_type'] == 'Path Length']
         self.assertEqual(len(path_issues), 1)
+
+
+class TestVerifyAllCsvBehavior(unittest.TestCase):
+
+    def test_verify_all_exports_csv_even_when_drive_is_clean(self):
+        verifier = _make_verifier()
+        verifier.csv_file = 'dummy.csv'
+
+        with patch.object(verifier, 'verify_filesystem'), \
+             patch.object(verifier, 'verify_structure'), \
+             patch.object(verifier, 'verify_audio_files'), \
+             patch.object(verifier, 'print_report'), \
+             patch.object(verifier, 'export_csv') as mock_export:
+            success = verifier.verify_all()
+
+        self.assertTrue(success)
+        mock_export.assert_called_once_with()
+
+    def test_export_csv_writes_header_for_clean_run(self):
+        verifier = _make_verifier()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / 'verify.csv'
+            verifier.csv_file = str(csv_path)
+            verifier.export_csv()
+
+            content = csv_path.read_text(encoding='utf-8').splitlines()
+            self.assertEqual(content[0], 'file_path,issue_type,severity,description')
+            self.assertEqual(len(content), 1)
 
 
 if __name__ == '__main__':

@@ -18,6 +18,7 @@ from lib.volvo_converter import (
     is_alac,
     LOSSLESS_EXTENSIONS,
     TARGET_EXTENSION,
+    validate_converted_output,
 )
 
 
@@ -159,6 +160,88 @@ class TestResumeSkip(unittest.TestCase):
 
         # Original .flac should still exist (we didn't convert)
         self.assertTrue(flac.exists())
+
+
+class TestOutputValidation(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_missing_output_is_invalid(self):
+        ok, message = validate_converted_output(self.base / 'missing.m4a')
+        self.assertFalse(ok)
+        self.assertIn('not created', message)
+
+    def test_zero_byte_output_is_invalid(self):
+        output = self.base / 'out.m4a'
+        output.write_bytes(b'')
+        ok, message = validate_converted_output(output)
+        self.assertFalse(ok)
+        self.assertIn('zero-byte', message)
+
+
+class TestLiveConversionSafety(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    @patch('lib.volvo_converter.validate_converted_output', return_value=(True, 'output file verified'))
+    @patch('lib.volvo_converter.run_ffmpeg', return_value=(True, 'Converted → song.m4a'))
+    @patch('lib.volvo_converter.find_lossless_files')
+    def test_live_conversion_deletes_original_only_after_verified_output(
+        self,
+        mock_find_lossless_files,
+        _mock_run_ffmpeg,
+        _mock_validate_output,
+    ):
+        from lib.volvo_converter import VolvoConverter
+
+        flac = self.base / 'song.flac'
+        flac.write_bytes(b'lossless')
+        output = self.base / 'song.m4a'
+        output.write_bytes(b'converted')
+        mock_find_lossless_files.return_value = [flac]
+
+        converter = VolvoConverter(str(self.base), dry_run=False, manifest_file=None)
+        converter.convert_all(ffmpeg_path='ffmpeg')
+
+        self.assertFalse(flac.exists())
+        self.assertTrue(output.exists())
+        self.assertEqual(converter.manifest_rows[0]['status'], 'converted_original_deleted')
+
+    @patch('lib.volvo_converter.find_lossless_files')
+    def test_live_conversion_keeps_original_when_output_fails_validation(
+        self,
+        mock_find_lossless_files,
+    ):
+        from lib.volvo_converter import VolvoConverter
+
+        flac = self.base / 'song.flac'
+        flac.write_bytes(b'lossless')
+        mock_find_lossless_files.return_value = [flac]
+
+        converter = VolvoConverter(str(self.base), dry_run=False, manifest_file=None)
+        output = self.base / 'song.m4a'
+        def fake_run_ffmpeg(_ffmpeg_path, _input_path, output_path, timeout=300):
+            output_path.write_bytes(b'partial-output')
+            return True, 'Converted → song.m4a'
+
+        with patch('lib.volvo_converter.run_ffmpeg', side_effect=fake_run_ffmpeg), \
+             patch('lib.volvo_converter.validate_converted_output', return_value=(False, 'conversion produced a zero-byte output file')):
+            converter.convert_all(ffmpeg_path='ffmpeg')
+
+        self.assertTrue(flac.exists())
+        self.assertFalse(output.exists())
+        self.assertEqual(converter.manifest_rows[0]['status'], 'failed')
+        self.assertEqual(converter.stats['failed'], 1)
 
 
 if __name__ == '__main__':
