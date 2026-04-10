@@ -341,6 +341,80 @@ class TestParentFolderShortening(unittest.TestCase):
         self.assertEqual(fixer.stats['files_renamed'], 1)
         self.assertEqual(fixer.failed_files, [])
 
+    def test_safe_merge_into_existing_shortened_folder(self):
+        source = self.base / 'Artist' / 'Album Name [320kbps CBR] @320' / '01 - Track.mp3'
+        existing = self.base / 'Artist' / 'Album Name' / 'cover.jpg'
+        source.parent.mkdir(parents=True, exist_ok=True)
+        existing.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(b'source')
+        existing.write_bytes(b'cover')
+
+        fixer = _make_fixer_with_base(self.base, dry_run=False)
+        fixer._process_file(
+            'Artist/Album Name [320kbps CBR] @320/01 - Track.mp3',
+            [{'issue_type': 'Path Length'}],
+        )
+
+        self.assertTrue((self.base / 'Artist' / 'Album Name' / '01 - Track.mp3').exists())
+        self.assertTrue((self.base / 'Artist' / 'Album Name' / 'cover.jpg').exists())
+        self.assertFalse((self.base / 'Artist' / 'Album Name [320kbps CBR] @320').exists())
+        self.assertEqual(fixer.failed_files, [])
+
+    def test_conflicting_merge_into_existing_shortened_folder_fails(self):
+        source = self.base / 'Artist' / 'Album Name [320kbps CBR] @320' / '01 - Track.mp3'
+        existing = self.base / 'Artist' / 'Album Name' / '01 - Track.mp3'
+        source.parent.mkdir(parents=True, exist_ok=True)
+        existing.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(b'source')
+        existing.write_bytes(b'existing')
+
+        fixer = _make_fixer_with_base(self.base, dry_run=False)
+        fixer._process_file(
+            'Artist/Album Name [320kbps CBR] @320/01 - Track.mp3',
+            [{'issue_type': 'Path Length'}],
+        )
+
+        self.assertTrue(source.exists())
+        self.assertTrue(existing.exists())
+        self.assertEqual(len(fixer.failed_files), 1)
+        self.assertIn('conflicting file', fixer.failed_files[0][1])
+
+    def test_dry_run_conflicting_merge_reports_failure(self):
+        source = self.base / 'Artist' / 'Album Name [320kbps CBR] @320' / '01 - Track.mp3'
+        existing = self.base / 'Artist' / 'Album Name' / '01 - Track.mp3'
+        source.parent.mkdir(parents=True, exist_ok=True)
+        existing.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(b'source')
+        existing.write_bytes(b'existing')
+
+        fixer = _make_fixer_with_base(self.base, dry_run=True)
+        fixer._process_file(
+            'Artist/Album Name [320kbps CBR] @320/01 - Track.mp3',
+            [{'issue_type': 'Path Length'}],
+        )
+
+        self.assertEqual(fixer.manifest_rows[0]['status'], 'failed')
+        self.assertIn('conflicting file', fixer.manifest_rows[0]['error'])
+
+    def test_nested_safe_merge_uses_highest_changed_parent(self):
+        source = self.base / 'Artist' / 'Album Name [320kbps CBR] @320' / 'Disc 1' / '01 - Track.mp3'
+        existing = self.base / 'Artist' / 'Album Name' / 'Artwork' / 'cover.jpg'
+        source.parent.mkdir(parents=True, exist_ok=True)
+        existing.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(b'audio')
+        existing.write_bytes(b'cover')
+
+        fixer = _make_fixer_with_base(self.base, dry_run=False)
+        fixer._process_file(
+            'Artist/Album Name [320kbps CBR] @320/Disc 1/01 - Track.mp3',
+            [{'issue_type': 'Path Length'}],
+        )
+
+        self.assertTrue((self.base / 'Artist' / 'Album Name' / 'Disc 1' / '01 - Track.mp3').exists())
+        self.assertTrue((self.base / 'Artist' / 'Album Name' / 'Artwork' / 'cover.jpg').exists())
+        self.assertFalse((self.base / 'Artist' / 'Album Name [320kbps CBR] @320').exists())
+        self.assertEqual(fixer.failed_files, [])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -232,6 +232,22 @@ class VolvoPathFixer:
                 fixes_applied.append("Removed encoding metadata from parent folders")
                 self.stats['parent_dirs_shortened'] += 1
 
+        merge_message, merge_error = self._assess_parent_dir_transition(current_path, new_path)
+        if merge_error:
+            self.log(f"✗ Failed to rename {file_path}: {merge_error}")
+            self.failed_files.append((file_path, merge_error))
+            self._record_manifest(
+                original_path=file_path,
+                new_path=str(new_path),
+                status='failed',
+                actions=[fix for fix in fixes_applied if not fix.startswith("⚠ WARNING:")],
+                warnings=[fix for fix in fixes_applied if fix.startswith("⚠ WARNING:")],
+                error=merge_error,
+            )
+            return
+        if merge_message:
+            fixes_applied.append(merge_message)
+
         # Collision detection: if the computed target path already exists as a
         # *different* file, generate a safe unique name by appending _2, _3, etc.
         if str(new_path) != str(current_path):
@@ -345,8 +361,7 @@ class VolvoPathFixer:
 
     def _apply_parent_dir_rename(self, current_path: Path, target_path: Path) -> Path:
         """Rename a parent directory once so unaffected siblings move together."""
-        current_parent = current_path.parent
-        target_parent = target_path.parent
+        current_parent, target_parent = self._get_transition_roots(current_path, target_path)
 
         if current_parent == target_parent:
             return current_path
@@ -357,15 +372,108 @@ class VolvoPathFixer:
         if not old_full.exists():
             return target_path
 
-        if new_full.exists() and new_full.resolve() != old_full.resolve():
-            raise FileExistsError(
-                f"Target directory already exists: {target_parent}. Refusing to split or merge folders automatically."
-            )
+        try:
+            same_dir = new_full.exists() and new_full.resolve() == old_full.resolve()
+        except OSError:
+            same_dir = False
+
+        if new_full.exists() and not same_dir:
+            conflicts = self._find_directory_merge_conflicts(old_full, new_full)
+            if conflicts:
+                preview = ', '.join(str(path) for path in conflicts[:3])
+                if len(conflicts) > 3:
+                    preview += f", ... (+{len(conflicts) - 3} more)"
+                raise FileExistsError(
+                    f"Target directory already exists with conflicting file(s): {preview}. Refusing automatic merge."
+                )
+
+            self._merge_directory_contents(old_full, new_full)
+            self.renamed_dirs[current_parent] = target_parent
+            return self._apply_known_dir_renames(current_path)
 
         new_full.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(old_full), str(new_full))
         self.renamed_dirs[current_parent] = target_parent
-        return target_parent / current_path.name
+        return self._apply_known_dir_renames(current_path)
+
+    def _assess_parent_dir_transition(self, current_path: Path, target_path: Path) -> Tuple[Optional[str], Optional[str]]:
+        """Describe whether a parent-folder transition is safe, mergeable, or blocked."""
+        current_parent, target_parent = self._get_transition_roots(current_path, target_path)
+
+        if current_parent == target_parent:
+            return None, None
+
+        old_full = self.drive_path / current_parent
+        new_full = self.drive_path / target_parent
+
+        if not old_full.exists() or not new_full.exists():
+            return None, None
+
+        try:
+            if new_full.resolve() == old_full.resolve():
+                return None, None
+        except OSError:
+            pass
+
+        conflicts = self._find_directory_merge_conflicts(old_full, new_full)
+        if conflicts:
+            preview = ', '.join(str(path) for path in conflicts[:3])
+            if len(conflicts) > 3:
+                preview += f", ... (+{len(conflicts) - 3} more)"
+            return None, f"Target directory already exists with conflicting file(s): {preview}. Refusing automatic merge."
+
+        return "Merged into existing shortened parent folder", None
+
+    def _get_transition_roots(self, current_path: Path, target_path: Path) -> Tuple[Path, Path]:
+        """Return the highest changed parent directories between current and target paths."""
+        current_parts = current_path.parent.parts
+        target_parts = target_path.parent.parts
+
+        common_len = 0
+        for current_part, target_part in zip(current_parts, target_parts):
+            if current_part != target_part:
+                break
+            common_len += 1
+
+        if common_len == len(current_parts) == len(target_parts):
+            return current_path.parent, target_path.parent
+
+        current_root = Path(*current_parts[:common_len + 1]) if current_parts else Path()
+        target_root = Path(*target_parts[:common_len + 1]) if target_parts else Path()
+        return current_root, target_root
+
+    def _find_directory_merge_conflicts(self, source_dir: Path, target_dir: Path) -> List[Path]:
+        """Return relative file paths that would collide during a directory merge."""
+        conflicts: List[Path] = []
+        for path in source_dir.rglob('*'):
+            rel_path = path.relative_to(source_dir)
+            dest_path = target_dir / rel_path
+
+            if path.is_dir():
+                if dest_path.exists() and not dest_path.is_dir():
+                    conflicts.append(rel_path)
+            else:
+                if dest_path.exists():
+                    conflicts.append(rel_path)
+
+        return conflicts
+
+    def _merge_directory_contents(self, source_dir: Path, target_dir: Path):
+        """Move source_dir contents into target_dir when conflicts have been pre-checked away."""
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        for child in list(source_dir.iterdir()):
+            dest = target_dir / child.name
+            if child.is_dir():
+                if dest.exists():
+                    self._merge_directory_contents(child, dest)
+                    child.rmdir()
+                else:
+                    shutil.move(str(child), str(dest))
+            else:
+                shutil.move(str(child), str(dest))
+
+        source_dir.rmdir()
 
     def _record_manifest(self, original_path: str, new_path: str, status: str,
                          actions: List[str], warnings: List[str], error: str):

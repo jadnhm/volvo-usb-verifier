@@ -196,6 +196,32 @@ class TestFixMp3File(unittest.TestCase):
         self.assertEqual(fixer.stats['added_tags'], 1)
         self.assertEqual(fixer.stats['files_modified'], 1)
 
+    @patch('lib.volvo_usb_fixer.MP3')
+    def test_apply_sanitizes_non_latin1_text_before_v23_save(self, mock_mp3):
+        fixer = VolvoUSBFixer('dummy.csv', str(self.base), dry_run=False, num_threads=1)
+        frame = MagicMock()
+        frame.encoding = None
+        frame.text = ['Café ☕']
+        tags = MagicMock()
+        tags.values.return_value = [frame]
+        audio = MagicMock()
+        audio.tags = tags
+        mock_mp3.return_value = audio
+
+        rel_path, fixes, success = fixer.fix_mp3_file(
+            self.file_path,
+            'song.mp3',
+            [{'issue_type': 'ID3 Tags', 'description': 'ID3v2.4 found'}],
+        )
+
+        self.assertTrue(success)
+        self.assertEqual(rel_path, 'song.mp3')
+        self.assertEqual(frame.text, ['Café'])
+        self.assertEqual(frame.encoding, 0)
+        self.assertIn('Sanitized tag text for ISO-8859-1 compatibility', fixes)
+        audio.save.assert_called_once_with(v1=2, v2_version=3)
+        self.assertEqual(fixer.stats['sanitized_tag_text'], 1)
+
 
 class TestFixM4AFile(unittest.TestCase):
 

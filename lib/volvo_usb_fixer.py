@@ -19,6 +19,7 @@ import os
 import sys
 import csv
 import logging
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
@@ -183,6 +184,66 @@ class VolvoUSBFixer:
 
         return None
 
+    def _sanitize_text_for_latin1(self, value):
+        """Return a best-effort ISO-8859-1-safe string for ID3v2.3 writes."""
+        if not isinstance(value, str):
+            return value
+
+        try:
+            value.encode('latin-1')
+            return value
+        except UnicodeEncodeError:
+            pass
+
+        sanitized_parts = []
+        for char in value:
+            try:
+                char.encode('latin-1')
+                sanitized_parts.append(char)
+                continue
+            except UnicodeEncodeError:
+                pass
+
+            normalized = unicodedata.normalize('NFKD', char)
+            replacement_parts = []
+            for part in normalized:
+                if unicodedata.combining(part):
+                    continue
+                try:
+                    part.encode('latin-1')
+                    replacement_parts.append(part)
+                except UnicodeEncodeError:
+                    continue
+            replacement = ''.join(replacement_parts)
+            sanitized_parts.append(replacement)
+
+        sanitized = ''.join(sanitized_parts).strip()
+        return sanitized or '?'
+
+    def _prepare_tags_for_id3v23(self, tags) -> bool:
+        """Force text frames to ISO-8859-1-safe values for ID3v2.3 writes.
+
+        Returns True if any frame text had to be sanitized.
+        """
+        sanitized_any = False
+
+        for frame in tags.values():
+            if hasattr(frame, 'text'):
+                original_text = frame.text
+                if isinstance(original_text, list):
+                    sanitized_text = [self._sanitize_text_for_latin1(value) for value in original_text]
+                else:
+                    sanitized_text = self._sanitize_text_for_latin1(original_text)
+
+                if sanitized_text != original_text:
+                    frame.text = sanitized_text
+                    sanitized_any = True
+
+            if hasattr(frame, 'encoding'):
+                frame.encoding = Encoding.LATIN1
+
+        return sanitized_any
+
     def fix_mp3_file(self, full_path: Path, rel_path: str, issues: List[Dict]):
         """Fix issues in an MP3 file. Returns (file_path, fixes_applied, success)."""
         try:
@@ -214,7 +275,7 @@ class VolvoUSBFixer:
                     # Create new ID3v2.3 tags
                     audio.tags = ID3()
                     # Add minimal tags (title from filename)
-                    title = full_path.stem
+                    title = self._sanitize_text_for_latin1(full_path.stem)
                     audio.tags.add(TIT2(encoding=Encoding.LATIN1, text=title))
                     modified = True
                     fixes_applied.append("Added basic ID3v2.3 tags")
@@ -227,12 +288,13 @@ class VolvoUSBFixer:
                     fixes_applied.append("Would convert ID3v2.4 to ID3v2.3")
                 else:
                     if audio.tags:
-                        # Convert all text frames to LATIN1 encoding
-                        for frame in audio.tags.values():
-                            if hasattr(frame, 'encoding'):
-                                frame.encoding = Encoding.LATIN1
+                        sanitized_text = self._prepare_tags_for_id3v23(audio.tags)
                         modified = True
                         fixes_applied.append("Converted ID3v2.4 to ID3v2.3")
+                        if sanitized_text:
+                            fixes_applied.append("Sanitized tag text for ISO-8859-1 compatibility")
+                            with self.stats_lock:
+                                self.stats['sanitized_tag_text'] += 1
                 with self.stats_lock:
                     self.stats['converted_tags'] += 1
 
@@ -242,12 +304,13 @@ class VolvoUSBFixer:
                     fixes_applied.append("Would convert to ID3v2.3")
                 else:
                     if audio.tags:
-                        # Convert all text frames to LATIN1 encoding
-                        for frame in audio.tags.values():
-                            if hasattr(frame, 'encoding'):
-                                frame.encoding = Encoding.LATIN1
+                        sanitized_text = self._prepare_tags_for_id3v23(audio.tags)
                         modified = True
                         fixes_applied.append("Converted to ID3v2.3")
+                        if sanitized_text:
+                            fixes_applied.append("Sanitized tag text for ISO-8859-1 compatibility")
+                            with self.stats_lock:
+                                self.stats['sanitized_tag_text'] += 1
                 with self.stats_lock:
                     self.stats['converted_unusual_tags'] += 1
 

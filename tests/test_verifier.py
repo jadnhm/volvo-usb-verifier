@@ -137,6 +137,113 @@ class TestVerifyId3Tags(unittest.TestCase):
         self.assertEqual(csv, [])
 
 
+class TestVerifyMp3(unittest.TestCase):
+
+    def setUp(self):
+        self.verifier = _make_verifier()
+
+    @patch('lib.volvo_usb_verifier.MP3')
+    def test_forbidden_bitrate_flagged_as_error(self, mock_mp3):
+        audio = MagicMock()
+        audio.info.bitrate = 144000
+        audio.info.sample_rate = 44100
+        audio.info.bitrate_mode = 'CBR'
+        audio.tags = MagicMock()
+        audio.tags.values.return_value = []
+        audio.tags.getall.return_value = [MagicMock(text=['1/12'])]
+        mock_mp3.return_value = audio
+
+        _display, csv = self.verifier._verify_mp3(Path('test.mp3'), Path('test.mp3'))
+
+        self.assertEqual(csv[0]['issue_type'], 'Bitrate')
+        self.assertEqual(csv[0]['severity'], 'Error')
+
+    @patch('lib.volvo_usb_verifier.MP3')
+    def test_invalid_sample_rate_flagged(self, mock_mp3):
+        audio = MagicMock()
+        audio.info.bitrate = 192000
+        audio.info.sample_rate = 22050
+        audio.info.bitrate_mode = 'CBR'
+        audio.tags = MagicMock()
+        audio.tags.values.return_value = []
+        audio.tags.getall.return_value = [MagicMock(text=['1/12'])]
+        mock_mp3.return_value = audio
+
+        _display, csv = self.verifier._verify_mp3(Path('test.mp3'), Path('test.mp3'))
+
+        issue_types = [issue['issue_type'] for issue in csv]
+        self.assertIn('Sample Rate', issue_types)
+
+    @patch('lib.volvo_usb_verifier.MP3')
+    def test_vbr_flagged(self, mock_mp3):
+        audio = MagicMock()
+        audio.info.bitrate = 192000
+        audio.info.sample_rate = 44100
+        audio.info.bitrate_mode = 'VBR'
+        audio.tags = MagicMock()
+        audio.tags.values.return_value = []
+        audio.tags.getall.return_value = [MagicMock(text=['1/12'])]
+        mock_mp3.return_value = audio
+
+        _display, csv = self.verifier._verify_mp3(Path('test.mp3'), Path('test.mp3'))
+
+        self.assertTrue(any(issue['issue_type'] == 'Encoding' for issue in csv))
+
+    @patch('lib.volvo_usb_verifier.MP3')
+    def test_missing_tags_flagged(self, mock_mp3):
+        audio = MagicMock()
+        audio.info.bitrate = 192000
+        audio.info.sample_rate = 44100
+        audio.info.bitrate_mode = 'CBR'
+        audio.tags = None
+        mock_mp3.return_value = audio
+
+        _display, csv = self.verifier._verify_mp3(Path('test.mp3'), Path('test.mp3'))
+
+        self.assertTrue(any(issue['issue_type'] == 'ID3 Tags' for issue in csv))
+
+
+class TestVerifyWmaAndAac(unittest.TestCase):
+
+    def setUp(self):
+        self.verifier = _make_verifier()
+
+    @patch('lib.volvo_usb_verifier.ASF')
+    def test_wma_out_of_range_bitrate_flagged(self, mock_asf):
+        audio = MagicMock()
+        audio.info.bitrate = 500000
+        mock_asf.return_value = audio
+
+        _display, csv = self.verifier._verify_wma(Path('test.wma'), Path('test.wma'))
+
+        self.assertEqual(len(csv), 1)
+        self.assertEqual(csv[0]['issue_type'], 'Bitrate')
+
+    @patch('lib.volvo_usb_verifier.MP4')
+    def test_aac_large_art_and_missing_track_flagged(self, mock_mp4):
+        audio = MagicMock()
+        audio.info.sample_rate = 44100
+        audio.tags = {'covr': [b'x' * (500 * 500 * 4)], 'trkn': []}
+        mock_mp4.return_value = audio
+
+        _display, csv = self.verifier._verify_aac_m4a(Path('test.m4a'), Path('test.m4a'))
+
+        issue_types = [issue['issue_type'] for issue in csv]
+        self.assertIn('Album Art', issue_types)
+        self.assertIn('Track Number', issue_types)
+
+    @patch('lib.volvo_usb_verifier.MP4')
+    def test_aac_out_of_range_sample_rate_flagged(self, mock_mp4):
+        audio = MagicMock()
+        audio.info.sample_rate = 192000
+        audio.tags = {'trkn': [(1, 10)]}
+        mock_mp4.return_value = audio
+
+        _display, csv = self.verifier._verify_aac_m4a(Path('test.m4a'), Path('test.m4a'))
+
+        self.assertTrue(any(issue['issue_type'] == 'Sample Rate' for issue in csv))
+
+
 class TestProblemFilesTracking(unittest.TestCase):
     """Verify that problem categories produce the right CSV issue_type values."""
 
