@@ -83,6 +83,17 @@ class VolvoPathFixer:
         re.compile(r'\s*@\s*\d{2,4}(?:\s*k?bps)?\b', re.IGNORECASE),
     ]
 
+    PARENT_DIR_REPLACEMENTS = [
+        (re.compile(r'\bDeluxe Edition\b', re.IGNORECASE), 'Dlx'),
+        (re.compile(r'\bLimited Edition\b', re.IGNORECASE), 'Ltd'),
+        (re.compile(r"\bCollector'?s Edition\b", re.IGNORECASE), 'Coll Ed'),
+        (re.compile(r'\bSpecial Edition\b', re.IGNORECASE), 'Sp Ed'),
+        (re.compile(r'\bRemastered\b', re.IGNORECASE), 'Rmstr'),
+        (re.compile(r'\bAnniversary Edition\b', re.IGNORECASE), 'Anniv Ed'),
+        (re.compile(r'\bBox Set\b', re.IGNORECASE), 'Box'),
+        (re.compile(r'\b(\d+)\s+CD\b', re.IGNORECASE), r'\1CD'),
+    ]
+
     MAX_PATH_LENGTH = 60
     MAX_FILENAME_LENGTH = 64
 
@@ -409,8 +420,12 @@ class VolvoPathFixer:
         result = value
         for pattern in self.ENCODING_TAG_PATTERNS:
             result = pattern.sub('', result)
+        for pattern, replacement in self.PARENT_DIR_REPLACEMENTS:
+            result = pattern.sub(replacement, result)
         result = re.sub(r'\s{2,}', ' ', result)
+        result = re.sub(r'\s*,\s*', ', ', result)
         result = re.sub(r'\s+([\]\)])', r'\1', result)
+        result = re.sub(r'([\[(])\s+', r'\1', result)
         return result.strip()
 
     def _shorten_parent_dirs(self, path_obj: Path) -> Path:

@@ -145,10 +145,24 @@ class TestShortenFilename(unittest.TestCase):
         result = self.fixer._strip_encoding_metadata("Album Name [320kbps CBR] @320")
         self.assertEqual(result, "Album Name")
 
+    def test_strip_parent_folder_edition_metadata_helper(self):
+        result = self.fixer._strip_encoding_metadata(
+            "Album Name (Deluxe Edition, 2 CD Remastered)"
+        )
+        self.assertEqual(result, "Album Name (Dlx, 2CD Rmstr)")
+
     def test_parent_folder_bitrate_tag_removed_for_long_paths(self):
         path_obj = Path("Artist") / "Album Name [320kbps CBR] @320" / "01 - Track.mp3"
         result = self.fixer._shorten_parent_dirs(path_obj)
         self.assertEqual(result, Path("Artist") / "Album Name" / "01 - Track.mp3")
+
+    def test_parent_folder_edition_metadata_shortened_for_long_paths(self):
+        path_obj = Path("Artist") / "Album Name (Deluxe Edition, 2 CD Remastered)" / "01 - Track.mp3"
+        result = self.fixer._shorten_parent_dirs(path_obj)
+        self.assertEqual(
+            result,
+            Path("Artist") / "Album Name (Dlx, 2CD Rmstr)" / "01 - Track.mp3",
+        )
 
     def test_parent_folder_unchanged_when_no_encoding_metadata(self):
         path_obj = Path("Artist") / "Album Name" / "01 - Track.mp3"
@@ -274,6 +288,23 @@ class TestParentFolderShortening(unittest.TestCase):
             Path(fixer.manifest_rows[0]['new_path']),
             Path('Artist') / 'Album Name' / '01 - Track.mp3',
         )
+        self.assertEqual(fixer.stats['parent_dirs_shortened'], 1)
+
+    def test_apply_mode_moves_file_into_edition_shortened_parent_folder(self):
+        source = self.base / 'Artist' / 'Album Name (Deluxe Edition, 2 CD Remastered)' / '01 - Track.mp3'
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(b'source')
+
+        fixer = _make_fixer_with_base(self.base, dry_run=False)
+        fixer._process_file(
+            'Artist/Album Name (Deluxe Edition, 2 CD Remastered)/01 - Track.mp3',
+            [{'issue_type': 'Path Length'}],
+        )
+
+        self.assertTrue(
+            (self.base / 'Artist' / 'Album Name (Dlx, 2CD Rmstr)' / '01 - Track.mp3').exists()
+        )
+        self.assertFalse(source.exists())
         self.assertEqual(fixer.stats['parent_dirs_shortened'], 1)
 
 
